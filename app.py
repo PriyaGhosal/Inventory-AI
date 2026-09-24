@@ -103,6 +103,284 @@ def dashboard():
     )
 
 
+@app.get("/categories")
+def categories():
+    """Display all categories for authenticated users."""
+    if "user_id" not in session:
+        flash("Please log in to access categories.", "error")
+        return redirect(url_for("login"))
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT category_id, category_name, description, created_at
+            FROM categories
+            ORDER BY category_name ASC
+            """
+        )
+        category_rows = cursor.fetchall()
+    except mysql.connector.Error:
+        app.logger.exception("Database error while loading categories")
+        flash("Categories are temporarily unavailable. Please try again.", "error")
+        category_rows = []
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+    return render_template(
+        "categories.html",
+        page_title="Category Management",
+        categories=category_rows,
+    )
+
+
+@app.route("/categories/add", methods=["GET", "POST"])
+def add_category():
+    """Display and process the add-category form."""
+    if "user_id" not in session:
+        flash("Please log in to manage categories.", "error")
+        return redirect(url_for("login"))
+
+    category = {
+        "category_name": "",
+        "description": "",
+    }
+    if request.method == "POST":
+        category["category_name"] = request.form.get("category_name", "").strip()
+        category["description"] = request.form.get("description", "").strip()
+        validation_error = validate_category_input(category)
+        if validation_error:
+            flash(validation_error, "error")
+            return render_template(
+                "category_form.html",
+                page_title="Add Category",
+                form_title="Add Category",
+                submit_label="Add Category",
+                category=category,
+            )
+
+        connection = None
+        cursor = None
+        try:
+            connection = get_db_connection()
+            cursor = connection.cursor()
+            cursor.execute(
+                """
+                INSERT INTO categories (category_name, description)
+                VALUES (%s, %s)
+                """,
+                (category["category_name"], category["description"] or None),
+            )
+            connection.commit()
+        except mysql.connector.IntegrityError:
+            if connection is not None:
+                connection.rollback()
+            flash("A category with that name already exists.", "error")
+            return render_template(
+                "category_form.html",
+                page_title="Add Category",
+                form_title="Add Category",
+                submit_label="Add Category",
+                category=category,
+            )
+        except mysql.connector.Error:
+            if connection is not None:
+                connection.rollback()
+            app.logger.exception("Database error while adding category")
+            flash("The category could not be added. Please try again.", "error")
+            return render_template(
+                "category_form.html",
+                page_title="Add Category",
+                form_title="Add Category",
+                submit_label="Add Category",
+                category=category,
+            )
+        finally:
+            if cursor is not None:
+                cursor.close()
+            if connection is not None and connection.is_connected():
+                connection.close()
+
+        flash("Category added successfully.", "success")
+        return redirect(url_for("categories"))
+
+    return render_template(
+        "category_form.html",
+        page_title="Add Category",
+        form_title="Add Category",
+        submit_label="Add Category",
+        category=category,
+    )
+
+
+@app.route("/categories/edit/<int:category_id>", methods=["GET", "POST"])
+def edit_category(category_id):
+    """Display and process the edit form for one category."""
+    if "user_id" not in session:
+        flash("Please log in to manage categories.", "error")
+        return redirect(url_for("login"))
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT category_id, category_name, description
+            FROM categories
+            WHERE category_id = %s
+            """,
+            (category_id,),
+        )
+        category = cursor.fetchone()
+    except mysql.connector.Error:
+        app.logger.exception("Database error while loading category %s", category_id)
+        flash("The category could not be loaded. Please try again.", "error")
+        return redirect(url_for("categories"))
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+    if category is None:
+        flash("Category not found.", "error")
+        return redirect(url_for("categories"))
+
+    if request.method == "POST":
+        category["category_name"] = request.form.get("category_name", "").strip()
+        category["description"] = request.form.get("description", "").strip()
+        validation_error = validate_category_input(category)
+        if validation_error:
+            flash(validation_error, "error")
+            return render_template(
+                "category_form.html",
+                page_title="Edit Category",
+                form_title="Edit Category",
+                submit_label="Save Changes",
+                category=category,
+            )
+
+        connection = None
+        cursor = None
+        try:
+            connection = get_db_connection()
+            cursor = connection.cursor()
+            cursor.execute(
+                """
+                UPDATE categories
+                SET category_name = %s, description = %s
+                WHERE category_id = %s
+                """,
+                (
+                    category["category_name"],
+                    category["description"] or None,
+                    category_id,
+                ),
+            )
+            connection.commit()
+        except mysql.connector.IntegrityError:
+            if connection is not None:
+                connection.rollback()
+            flash("A category with that name already exists.", "error")
+            return render_template(
+                "category_form.html",
+                page_title="Edit Category",
+                form_title="Edit Category",
+                submit_label="Save Changes",
+                category=category,
+            )
+        except mysql.connector.Error:
+            if connection is not None:
+                connection.rollback()
+            app.logger.exception("Database error while editing category %s", category_id)
+            flash("The category could not be updated. Please try again.", "error")
+            return render_template(
+                "category_form.html",
+                page_title="Edit Category",
+                form_title="Edit Category",
+                submit_label="Save Changes",
+                category=category,
+            )
+        finally:
+            if cursor is not None:
+                cursor.close()
+            if connection is not None and connection.is_connected():
+                connection.close()
+
+        flash("Category updated successfully.", "success")
+        return redirect(url_for("categories"))
+
+    return render_template(
+        "category_form.html",
+        page_title="Edit Category",
+        form_title="Edit Category",
+        submit_label="Save Changes",
+        category=category,
+    )
+
+
+@app.post("/categories/delete/<int:category_id>")
+def delete_category(category_id):
+    """Delete a category when no products depend on it."""
+    if "user_id" not in session:
+        flash("Please log in to manage categories.", "error")
+        return redirect(url_for("login"))
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        cursor.execute(
+            "DELETE FROM categories WHERE category_id = %s",
+            (category_id,),
+        )
+        if cursor.rowcount == 0:
+            flash("Category not found.", "error")
+        else:
+            connection.commit()
+            flash("Category deleted successfully.", "success")
+            return redirect(url_for("categories"))
+    except mysql.connector.IntegrityError:
+        if connection is not None:
+            connection.rollback()
+        flash(
+            "This category cannot be deleted because products are using it.",
+            "error",
+        )
+    except mysql.connector.Error:
+        if connection is not None:
+            connection.rollback()
+        app.logger.exception("Database error while deleting category %s", category_id)
+        flash("The category could not be deleted. Please try again.", "error")
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+    return redirect(url_for("categories"))
+
+
+def validate_category_input(category):
+    """Return a friendly validation message, or None when input is valid."""
+    if not category["category_name"]:
+        return "Category name is required."
+    if len(category["category_name"]) > 100:
+        return "Category name must be 100 characters or fewer."
+    if len(category["description"]) > 255:
+        return "Description must be 255 characters or fewer."
+    return None
+
+
 @app.post("/logout")
 def logout():
     """End the current session and return the user to the login page."""

@@ -2,8 +2,9 @@
 
 Inventory-AI is a beginner-friendly Inventory Management System built with
 Python 3.10, Flask, MySQL, HTML, CSS, vanilla JavaScript, and Jinja2. The
-project is being developed in small steps. Stage 2 adds real MySQL-backed user
-authentication and a protected dashboard placeholder.
+project is being developed in small steps. Stage 2 adds real MySQL-backed user authentication and a protected dashboard
+placeholder. Stage 3 adds protected category management with add, edit, list,
+and safe delete operations.
 
 ## Project structure
 
@@ -17,6 +18,8 @@ Inventory-AI/
 ├── templates/base.html
 ├── templates/login.html
 ├── templates/dashboard.html
+├── templates/categories.html
+├── templates/category_form.html
 ├── static/css/style.css
 ├── static/js/script.js
 └── utils/helpers.py
@@ -61,3 +64,11 @@ login page. Use the Logout button to clear the session.
 
 No product, supplier, purchase, sales, reporting, or AI functionality is
 implemented yet.
+
+## Category management
+
+After logging in, use the **Categories** link in the navigation to manage
+categories. Category names are required, limited to 100 characters, and must
+be unique. Descriptions are optional and limited to the existing database
+column size of 255 characters. A category that is referenced by a product
+cannot be deleted.

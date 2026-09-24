@@ -80,7 +80,9 @@ nav a:hover {
 
 .hero-card,
 .form-card,
-.dashboard-card {
+.dashboard-card,
+.table-card,
+.empty-state {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 14px;
@@ -99,6 +101,92 @@ nav a:hover {
 
 .dashboard-card {
     max-width: 680px;
+}
+
+.page-heading {
+    align-items: end;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+    gap: 1rem;
+}
+
+.page-heading h1 {
+    margin-bottom: 0.25rem;
+}
+
+.table-card {
+    padding: 0;
+}
+
+.table-wrapper {
+    overflow-x: auto;
+}
+
+table {
+    border-collapse: collapse;
+    min-width: 700px;
+    width: 100%;
+}
+
+th,
+td {
+    border-bottom: 1px solid var(--border);
+    padding: 1rem;
+    text-align: left;
+    vertical-align: middle;
+}
+
+th {
+    background: var(--pale-blue);
+    color: var(--navy);
+    font-size: 0.85rem;
+}
+
+tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.actions {
+    display: flex;
+    gap: 0.5rem;
+    white-space: nowrap;
+}
+
+.actions form {
+    margin: 0;
+}
+
+.button-small {
+    font-size: 0.85rem;
+    margin-top: 0;
+    padding: 0.5rem 0.75rem;
+}
+
+.button-danger {
+    background: #c64545;
+}
+
+.button-danger:hover {
+    background: #9f2f2f;
+}
+
+.button-secondary {
+    background: #e8eef5;
+    color: var(--navy);
+}
+
+.button-secondary:hover {
+    background: #d7e1ec;
+}
+
+.empty-state {
+    text-align: center;
+}
+
+.empty-state h2 {
+    color: var(--navy);
+    margin-top: 0;
 }
 
 .flash-list {
@@ -189,9 +277,28 @@ input {
     padding: 0.75rem;
 }
 
+textarea {
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    font: inherit;
+    padding: 0.75rem;
+    resize: vertical;
+}
+
 input:focus {
     border-color: var(--blue);
     outline: 2px solid var(--pale-blue);
+}
+
+textarea:focus {
+    border-color: var(--blue);
+    outline: 2px solid var(--pale-blue);
+}
+
+.form-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
 }
 
 .site-footer {
@@ -203,7 +310,13 @@ input:focus {
 
 @media (max-width: 600px) {
     .hero-card,
-    .form-card {
+    .form-card,
+    .empty-state {
         padding: 2rem 1.25rem;
+    }
+
+    .page-heading {
+        align-items: flex-start;
+        flex-direction: column;
     }
 }
