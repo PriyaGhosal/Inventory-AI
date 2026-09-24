@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-heading">
+    <div>
+        <p class="eyebrow">Baseline planning tool</p>
+        <h1>Demand Forecast</h1>
+        <p class="muted">Use recent completed sales to estimate near-term product demand.</p>
+    </div>
+</section>
+
+<section class="form-card forecast-selector">
+    <form method="get" action="{{ url_for('forecast') }}">
+        <label for="product_id">Select an active product</label>
+        <div class="forecast-select-row">
+            <select id="product_id" name="product_id" required>
+                <option value="">Choose a product</option>
+                {% for option in products %}
+                    <option value="{{ option.product_id }}"
+                        {% if product and option.product_id == product.product_id %}selected{% endif %}>
+                        {{ option.product_name }} ({{ option.sku }})
+                    </option>
+                {% endfor %}
+            </select>
+            <button class="button" type="submit">View Forecast</button>
+        </div>
+    </form>
+</section>
+
+{% if not product_selected %}
+    <p class="empty-state forecast-message">Select a product to view its demand forecast.</p>
+{% elif product and not has_sales_history %}
+    <p class="empty-state forecast-message">Not enough sales history to generate a meaningful forecast.</p>
+{% elif product and forecast_result and recommendation %}
+    <section class="forecast-product-card">
+        <div>
+            <p class="eyebrow">Selected product</p>
+            <h2>{{ product.product_name }}</h2>
+            <p class="muted">SKU: {{ product.sku }}</p>
+        </div>
+        <div class="forecast-product-facts">
+            <div><span>Current Stock</span><strong>{{ product.current_stock }}</strong></div>
+            <div><span>Reorder Level</span><strong>{{ product.reorder_level }}</strong></div>
+        </div>
+    </section>
+
+    <div class="forecast-summary-grid">
+        <div class="summary-card"><span>Method</span><strong>{{ forecast_result.method }}</strong></div>
+        <div class="summary-card"><span>Average Daily Demand</span><strong>{{ "%.2f"|format(forecast_result.daily_forecast) }}</strong></div>
+        <div class="summary-card"><span>Forecast Period</span><strong>Next 7 Days</strong></div>
+        <div class="summary-card"><span>Forecasted Demand</span><strong>{{ "%.2f"|format(forecast_result.total_forecast) }} units</strong></div>
+        <div class="summary-card"><span>Recommended Stock</span><strong>{{ recommendation.recommended_stock }}</strong></div>
+        <div class="summary-card forecast-recommendation"><span>Recommended Order Quantity</span><strong>{{ recommendation.recommended_order_quantity }}</strong></div>
+    </div>
+
+    <section class="dashboard-section">
+        <div class="section-heading">
+            <h2>Historical Demand</h2>
+            <span class="muted">Last 30 days of completed sales</span>
+        </div>
+        <div class="table-wrapper">
+            <table>
+                <thead><tr><th>Date</th><th>Quantity Sold</th></tr></thead>
+                <tbody>
+                    {% for observation in historical_sales %}
+                    <tr>
+                        <td>{{ observation.date.strftime("%d %b %Y") }}</td>
+                        <td>{{ observation.quantity }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="forecast-explanation">
+        Based on recent sales, expected demand for the next 7 days is
+        approximately <strong>{{ "%.2f"|format(forecast_result.total_forecast) }} units</strong>.
+        This is a baseline recommendation and does not yet account for supplier
+        lead time, safety stock, seasonal demand, promotions, or sudden demand changes.
+    </section>
+{% endif %}
+{% endblock %}

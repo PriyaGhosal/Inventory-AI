@@ -15,6 +15,11 @@ from werkzeug.security import check_password_hash, generate_password_hash
 load_dotenv()
 
 from config import Config
+from utils.forecasting import (
+    calculate_reorder_recommendation,
+    forecast_demand,
+    get_daily_product_sales,
+)
 from utils.helpers import get_db_connection
 
 
@@ -94,15 +99,212 @@ def login():
 
 @app.route("/dashboard")
 def dashboard():
-    """Display a protected placeholder dashboard for authenticated users."""
+    """Display the authenticated inventory and activity overview."""
     if "user_id" not in session:
         flash("Please log in to access the dashboard.", "error")
         return redirect(url_for("login"))
+
+    connection = None
+    cursor = None
+    dashboard_data = {
+        "summary": {
+            "total_products": 0,
+            "total_categories": 0,
+            "total_suppliers": 0,
+            "low_stock_items": 0,
+            "out_of_stock": 0,
+            "inventory_value": Decimal("0.00"),
+            "todays_sales": Decimal("0.00"),
+            "todays_purchases": Decimal("0.00"),
+        },
+        "low_stock_products": [],
+        "recent_sales": [],
+        "recent_purchases": [],
+        "recent_activity": [],
+    }
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM products WHERE is_active = TRUE) AS total_products,
+                (SELECT COUNT(*) FROM categories) AS total_categories,
+                (SELECT COUNT(*) FROM suppliers) AS total_suppliers,
+                (SELECT COUNT(*) FROM products
+                 WHERE is_active = TRUE
+                   AND current_stock > 0
+                   AND current_stock <= reorder_level) AS low_stock_items,
+                (SELECT COUNT(*) FROM products
+                 WHERE is_active = TRUE AND current_stock <= 0) AS out_of_stock,
+                COALESCE((SELECT SUM(current_stock * cost_price)
+                          FROM products WHERE is_active = TRUE), 0) AS inventory_value,
+                COALESCE((SELECT SUM(total_amount) FROM sales
+                          WHERE status = 'completed'
+                            AND DATE(sale_date) = CURDATE()), 0) AS todays_sales,
+                COALESCE((SELECT SUM(total_amount) FROM purchases
+                          WHERE status = 'received'
+                            AND DATE(purchase_date) = CURDATE()), 0) AS todays_purchases
+            """
+        )
+        dashboard_data["summary"] = cursor.fetchone()
+
+        cursor.execute(
+            """
+            SELECT product_id, product_name, sku, current_stock,
+                   reorder_level, unit
+            FROM products
+            WHERE is_active = TRUE
+              AND current_stock <= reorder_level
+            ORDER BY current_stock ASC, product_name ASC
+            LIMIT 10
+            """
+        )
+        dashboard_data["low_stock_products"] = cursor.fetchall()
+
+        cursor.execute(
+            """
+            SELECT sale_id, customer_name, sale_date, total_amount,
+                   payment_method, status
+            FROM sales
+            WHERE status = 'completed'
+            ORDER BY sale_date DESC, sale_id DESC
+            LIMIT 5
+            """
+        )
+        dashboard_data["recent_sales"] = cursor.fetchall()
+
+        cursor.execute(
+            """
+            SELECT p.purchase_id, p.invoice_number, p.purchase_date,
+                   p.total_amount, p.status, s.supplier_name
+            FROM purchases AS p
+            INNER JOIN suppliers AS s ON p.supplier_id = s.supplier_id
+            WHERE p.status = 'received'
+            ORDER BY p.purchase_date DESC, p.purchase_id DESC
+            LIMIT 5
+            """
+        )
+        dashboard_data["recent_purchases"] = cursor.fetchall()
+
+        cursor.execute(
+            """
+            SELECT st.transaction_id, st.transaction_date,
+                   st.transaction_type, st.quantity, st.balance_after,
+                   p.product_name, p.sku, u.full_name
+            FROM stock_transactions AS st
+            INNER JOIN products AS p ON st.product_id = p.product_id
+            INNER JOIN users AS u ON st.user_id = u.user_id
+            ORDER BY st.transaction_date DESC, st.transaction_id DESC
+            LIMIT 8
+            """
+        )
+        dashboard_data["recent_activity"] = cursor.fetchall()
+    except mysql.connector.Error:
+        app.logger.exception("Database error while loading dashboard")
+        flash("Dashboard data is temporarily unavailable. Please try again.", "error")
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
     return render_template(
         "dashboard.html",
         page_title="Dashboard",
         full_name=session["full_name"],
         role=session["role"],
+        **dashboard_data,
+    )
+
+
+@app.get("/forecast")
+def forecast():
+    """Display a baseline demand forecast for one active product."""
+    if "user_id" not in session:
+        flash("Please log in to access demand forecasting.", "error")
+        return redirect(url_for("login"))
+
+    selected_product_id = request.args.get("product_id", "").strip()
+    product_id = None
+    if selected_product_id:
+        try:
+            product_id = int(selected_product_id)
+            if product_id <= 0:
+                raise ValueError
+        except ValueError:
+            flash("Please select a valid product.", "error")
+
+    connection = None
+    cursor = None
+    products = []
+    product = None
+    historical_sales = []
+    forecast_result = None
+    recommendation = None
+    has_sales_history = False
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT product_id, product_name, sku, current_stock, reorder_level
+            FROM products
+            WHERE is_active = TRUE
+            ORDER BY product_name ASC
+            """
+        )
+        products = cursor.fetchall()
+
+        if product_id is not None:
+            cursor.execute(
+                """
+                SELECT product_id, product_name, sku, current_stock, reorder_level
+                FROM products
+                WHERE product_id = %s AND is_active = TRUE
+                LIMIT 1
+                """,
+                (product_id,),
+            )
+            product = cursor.fetchone()
+            if product is None:
+                flash("The selected product is not available.", "error")
+            else:
+                daily_sales = get_daily_product_sales(
+                    connection, product["product_id"], days=90
+                )
+                has_sales_history = any(
+                    observation["quantity"] > 0 for observation in daily_sales
+                )
+                if has_sales_history:
+                    forecast_result = forecast_demand(
+                        daily_sales, forecast_days=7, window=7
+                    )
+                    recommendation = calculate_reorder_recommendation(
+                        product["current_stock"],
+                        forecast_result["total_forecast"],
+                        product["reorder_level"],
+                    )
+                    historical_sales = daily_sales[-30:]
+    except mysql.connector.Error:
+        app.logger.exception("Database error while loading demand forecast")
+        flash("Forecast data is temporarily unavailable. Please try again.", "error")
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+    return render_template(
+        "forecast.html",
+        page_title="Demand Forecast",
+        products=products,
+        product=product,
+        historical_sales=historical_sales,
+        forecast_result=forecast_result,
+        recommendation=recommendation,
+        has_sales_history=has_sales_history,
+        product_selected=bool(selected_product_id),
     )
 
 

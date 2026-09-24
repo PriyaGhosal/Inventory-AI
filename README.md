@@ -34,6 +34,7 @@ Inventory-AI/
 ├── templates/inventory.html
 ├── templates/stock_adjustment.html
 ├── templates/stock_history.html
+├── templates/dashboard.html
 ├── static/css/style.css
 ├── static/js/script.js
 └── utils/helpers.py
@@ -127,3 +128,24 @@ adjustments. Increases record positive adjustment quantities; decreases record
 negative adjustment quantities. Every adjustment locks the product row and
 updates `products.current_stock` and `stock_transactions` in one transaction.
 Purchases and sales continue to own their existing stock-update logic.
+
+## Dashboard and reporting
+
+The protected dashboard now shows aggregated product, category, supplier,
+stock-value, and today activity summaries. It also shows low-stock alerts,
+recent completed sales, received purchases, and recent stock activity. These
+sections read the existing tables without adding sample data or changing stock
+movement behavior.
+
+## Stage 10 demand forecasting foundation
+
+The protected **Demand Forecast** page uses completed sales from the last 90
+days to create a simple, explainable seven-day moving-average baseline for a
+selected active product. Days with no sales are included as zero-demand
+observations. The page also shows the last 30 days of demand and a baseline
+reorder recommendation.
+
+The recommendation is intentionally limited: it does not yet account for
+supplier lead time, safety stock, seasonal demand, promotions, or sudden demand
+changes. No machine-learning or external forecasting packages are required for
+this stage.

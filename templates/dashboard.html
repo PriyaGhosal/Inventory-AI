@@ -1,16 +1,131 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="dashboard-card">
-    <p class="eyebrow">Protected dashboard</p>
-    <h1>Welcome, {{ full_name }}.</h1>
-    <p class="lead">You are signed in and ready for the next project stage.</p>
-    <div class="account-summary">
-        <span class="summary-label">Role</span>
-        <strong>{{ role|title }}</strong>
+<section class="page-heading dashboard-heading">
+    <div>
+        <p class="eyebrow">Inventory overview</p>
+        <h1>Welcome, {{ full_name }}.</h1>
+        <p class="muted">Here is the latest view of your inventory operations.</p>
     </div>
-    <form method="post" action="{{ url_for('logout') }}">
-        <button class="button" type="submit">Logout</button>
-    </form>
+    <div class="dashboard-heading-actions">
+        <a class="button button-secondary" href="{{ url_for('forecast') }}">Demand Forecast</a>
+        <span class="role-label">{{ role|title }}</span>
+    </div>
+</section>
+
+<div class="dashboard-summary-grid">
+    <div class="summary-card"><span>Active Products</span><strong>{{ summary.total_products }}</strong></div>
+    <div class="summary-card summary-low-stock"><span>Low Stock</span><strong>{{ summary.low_stock_items }}</strong></div>
+    <div class="summary-card summary-out-stock"><span>Out of Stock</span><strong>{{ summary.out_of_stock }}</strong></div>
+    <div class="summary-card"><span>Inventory Value</span><strong>₹{{ "%.2f"|format(summary.inventory_value) }}</strong></div>
+    <div class="summary-card"><span>Categories</span><strong>{{ summary.total_categories }}</strong></div>
+    <div class="summary-card"><span>Suppliers</span><strong>{{ summary.total_suppliers }}</strong></div>
+    <div class="summary-card summary-today"><span>Today's Sales</span><strong>₹{{ "%.2f"|format(summary.todays_sales) }}</strong></div>
+    <div class="summary-card summary-today"><span>Today's Purchases</span><strong>₹{{ "%.2f"|format(summary.todays_purchases) }}</strong></div>
+</div>
+
+<section class="dashboard-section">
+    <div class="section-heading">
+        <h2>Low Stock Alerts</h2>
+        <a href="{{ url_for('inventory') }}">View Inventory</a>
+    </div>
+    {% if low_stock_products %}
+    <div class="table-wrapper">
+        <table>
+            <thead><tr><th>Product</th><th>SKU</th><th>Current</th><th>Reorder</th><th>Unit</th><th>Status</th></tr></thead>
+            <tbody>
+                {% for product in low_stock_products %}
+                <tr>
+                    <td>{{ product.product_name }}</td>
+                    <td>{{ product.sku }}</td>
+                    <td>{{ product.current_stock }}</td>
+                    <td>{{ product.reorder_level }}</td>
+                    <td>{{ product.unit or "—" }}</td>
+                    <td>
+                        {% if product.current_stock <= 0 %}
+                            <span class="status-badge stock-status-out_of_stock">Out of Stock</span>
+                        {% else %}
+                            <span class="status-badge stock-status-low_stock">Low Stock</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+        <p class="muted dashboard-empty">No low-stock products right now.</p>
+    {% endif %}
+</section>
+
+<div class="dashboard-columns">
+    <section class="dashboard-section">
+        <div class="section-heading"><h2>Recent Sales</h2><a href="{{ url_for('sales') }}">View All Sales</a></div>
+        {% if recent_sales %}
+        <div class="table-wrapper">
+            <table>
+                <thead><tr><th>ID</th><th>Customer</th><th>Date</th><th>Total</th><th>Payment</th><th>Status</th></tr></thead>
+                <tbody>
+                    {% for sale in recent_sales %}
+                    <tr>
+                        <td><a href="{{ url_for('sale_detail', sale_id=sale.sale_id) }}">#{{ sale.sale_id }}</a></td>
+                        <td>{{ sale.customer_name or "Walk-in customer" }}</td>
+                        <td>{{ sale.sale_date.strftime("%d %b %Y") }}</td>
+                        <td>₹{{ "%.2f"|format(sale.total_amount) }}</td>
+                        <td>{{ sale.payment_method|upper }}</td>
+                        <td><span class="status-badge status-completed">Completed</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}<p class="muted dashboard-empty">No completed sales yet.</p>{% endif %}
+    </section>
+
+    <section class="dashboard-section">
+        <div class="section-heading"><h2>Recent Purchases</h2><a href="{{ url_for('purchases') }}">View All Purchases</a></div>
+        {% if recent_purchases %}
+        <div class="table-wrapper">
+            <table>
+                <thead><tr><th>ID</th><th>Supplier</th><th>Invoice</th><th>Date</th><th>Total</th><th>Status</th></tr></thead>
+                <tbody>
+                    {% for purchase in recent_purchases %}
+                    <tr>
+                        <td><a href="{{ url_for('purchase_detail', purchase_id=purchase.purchase_id) }}">#{{ purchase.purchase_id }}</a></td>
+                        <td>{{ purchase.supplier_name }}</td>
+                        <td>{{ purchase.invoice_number }}</td>
+                        <td>{{ purchase.purchase_date.strftime("%d %b %Y") }}</td>
+                        <td>₹{{ "%.2f"|format(purchase.total_amount) }}</td>
+                        <td><span class="status-badge status-received">Received</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}<p class="muted dashboard-empty">No received purchases yet.</p>{% endif %}
+    </section>
+</div>
+
+<section class="dashboard-section">
+    <div class="section-heading"><h2>Recent Stock Activity</h2><a href="{{ url_for('inventory_history') }}">View Stock History</a></div>
+    {% if recent_activity %}
+    <div class="table-wrapper">
+        <table>
+            <thead><tr><th>Date</th><th>Product</th><th>Type</th><th>Quantity</th><th>Balance After</th><th>User</th></tr></thead>
+            <tbody>
+                {% for activity in recent_activity %}
+                <tr>
+                    <td>{{ activity.transaction_date.strftime("%d %b %Y %H:%M") }}</td>
+                    <td>{{ activity.product_name }} <small>({{ activity.sku }})</small></td>
+                    <td><span class="status-badge transaction-{{ activity.transaction_type }}">{{ activity.transaction_type|title }}</span></td>
+                    <td class="{% if activity.quantity > 0 %}quantity-positive{% else %}quantity-negative{% endif %}">{{ "%+.2f"|format(activity.quantity) }}</td>
+                    <td>{{ "%.2f"|format(activity.balance_after) }}</td>
+                    <td>{{ activity.full_name }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}<p class="muted dashboard-empty">No stock activity yet.</p>{% endif %}
 </section>
 {% endblock %}

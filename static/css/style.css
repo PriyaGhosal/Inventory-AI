@@ -103,6 +103,188 @@ nav a:hover {
     max-width: 680px;
 }
 
+.dashboard-heading {
+    align-items: center;
+}
+
+.role-label {
+    background: var(--pale-blue);
+    border-radius: 999px;
+    color: var(--navy);
+    font-size: 0.85rem;
+    font-weight: 700;
+    padding: 0.45rem 0.8rem;
+}
+
+.dashboard-heading-actions {
+    align-items: center;
+    display: flex;
+    gap: 0.75rem;
+}
+
+.forecast-selector {
+    margin: 0 0 1.5rem;
+    max-width: none;
+    padding: 1.5rem;
+}
+
+.forecast-select-row {
+    align-items: end;
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.forecast-select-row select {
+    flex: 1;
+}
+
+.forecast-message {
+    margin: 0;
+    max-width: none;
+    text-align: center;
+}
+
+.forecast-product-card {
+    align-items: center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+    padding: 1.5rem;
+}
+
+.forecast-product-card h2 {
+    margin-bottom: 0.25rem;
+}
+
+.forecast-product-facts {
+    display: flex;
+    gap: 2rem;
+}
+
+.forecast-product-facts div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.forecast-product-facts span,
+.forecast-summary-grid .summary-card span {
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+
+.forecast-summary-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(3, 1fr);
+    margin-bottom: 1.5rem;
+}
+
+.forecast-summary-grid .summary-card strong {
+    font-size: 1.25rem;
+}
+
+.forecast-recommendation {
+    border-color: #a8d5b1;
+}
+
+.forecast-recommendation strong {
+    color: #246b35;
+}
+
+.forecast-explanation {
+    background: var(--pale-blue);
+    border-radius: 10px;
+    color: var(--navy);
+    line-height: 1.6;
+    margin-bottom: 1.5rem;
+    padding: 1rem 1.25rem;
+}
+
+.dashboard-summary-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(4, 1fr);
+    margin-bottom: 1.5rem;
+}
+
+.summary-today strong {
+    color: var(--blue);
+}
+
+.dashboard-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 12px 30px rgb(23 50 77 / 6%);
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+    padding: 1.5rem;
+}
+
+.dashboard-columns {
+    display: grid;
+    gap: 1.5rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dashboard-columns .dashboard-section {
+    min-width: 0;
+}
+
+.section-heading {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.section-heading h2 {
+    color: var(--navy);
+    font-size: 1.2rem;
+    margin: 0;
+}
+
+.section-heading a {
+    color: var(--blue);
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.section-heading a:hover {
+    text-decoration: underline;
+}
+
+.dashboard-section table {
+    min-width: 620px;
+}
+
+.dashboard-empty {
+    margin: 0.5rem 0;
+}
+
+.status-completed {
+    background: #edf9f0;
+    color: #246b35;
+}
+
+.quantity-positive {
+    color: #246b35;
+    font-weight: 700;
+}
+
+.quantity-negative {
+    color: #9b2525;
+    font-weight: 700;
+}
+
 .page-heading {
     align-items: end;
     display: flex;
@@ -694,6 +876,18 @@ textarea:focus {
         grid-template-columns: repeat(2, 1fr);
     }
 
+    .dashboard-summary-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .dashboard-columns {
+        grid-template-columns: 1fr;
+    }
+
+    .forecast-summary-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
     .detail-grid {
         grid-template-columns: repeat(2, 1fr);
     }
@@ -717,6 +911,21 @@ textarea:focus {
 
 @media (max-width: 420px) {
     .summary-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .dashboard-summary-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .dashboard-heading-actions,
+    .forecast-product-card,
+    .forecast-select-row {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .forecast-summary-grid {
         grid-template-columns: 1fr;
     }
 }
