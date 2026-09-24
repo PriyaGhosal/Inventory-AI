@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-heading">
+    <div>
+        <p class="eyebrow">Inventory operations</p>
+        <h1>Sales Management</h1>
+        <p class="muted">Record sales and keep stock accurate.</p>
+    </div>
+    <a class="button" href="{{ url_for('add_sale') }}">New Sale</a>
+</section>
+
+<form class="search-form" method="get" action="{{ url_for('sales') }}">
+    <label for="sale-search">Search sales</label>
+    <div class="search-controls">
+        <input id="sale-search" name="search" type="search" value="{{ search_term }}" placeholder="Sale ID, customer name, or phone">
+        <select name="payment_method" aria-label="Filter by payment method">
+            <option value="">All payment methods</option>
+            {% for method in ("cash", "card", "upi", "other") %}
+                <option value="{{ method }}" {% if payment_filter == method %}selected{% endif %}>{{ method|upper }}</option>
+            {% endfor %}
+        </select>
+        <button class="button" type="submit">Filter</button>
+        {% if search_term or payment_filter %}
+            <a class="button button-secondary" href="{{ url_for('sales') }}">Clear</a>
+        {% endif %}
+    </div>
+</form>
+
+{% if sales %}
+<div class="table-card">
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th><th>Customer</th><th>Sale Date</th><th>Total Amount</th>
+                    <th>Payment Method</th><th>Status</th><th>Created By</th><th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sale in sales %}
+                <tr>
+                    <td>{{ sale.sale_id }}</td>
+                    <td>{{ sale.customer_name or "Walk-in customer" }}</td>
+                    <td>{{ sale.sale_date.strftime("%d %b %Y") if sale.sale_date else "—" }}</td>
+                    <td>₹{{ "%.2f"|format(sale.total_amount) }}</td>
+                    <td><span class="payment-badge">{{ sale.payment_method|upper }}</span></td>
+                    <td><span class="status-badge status-{{ sale.status }}">{{ sale.status|title }}</span></td>
+                    <td>{{ sale.full_name }}</td>
+                    <td class="actions">
+                        <a class="button button-small" href="{{ url_for('sale_detail', sale_id=sale.sale_id) }}">View Details</a>
+                        {% if sale.status == "completed" %}
+                            <form method="post" action="{{ url_for('cancel_sale', sale_id=sale.sale_id) }}">
+                                <button class="button button-small button-danger" type="submit">Cancel</button>
+                            </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<section class="empty-state">
+    <h2>{% if search_term or payment_filter %}No matching sales{% else %}No sales yet{% endif %}</h2>
+    <p class="muted">{% if search_term or payment_filter %}Try changing the search or payment filter.{% else %}Create your first sale to begin recording transactions.{% endif %}</p>
+    {% if not search_term and not payment_filter %}<a class="button" href="{{ url_for('add_sale') }}">Create Your First Sale</a>{% endif %}
+</section>
+{% endif %}
+{% endblock %}

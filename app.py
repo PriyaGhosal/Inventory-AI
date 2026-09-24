@@ -1620,6 +1620,476 @@ def render_purchase_form(form_data):
     )
 
 
+@app.get("/sales")
+def sales():
+    """Display completed and cancelled sales with optional filters."""
+    if "user_id" not in session:
+        flash("Please log in to access sales.", "error")
+        return redirect(url_for("login"))
+
+    search_term = request.args.get("search", "").strip()
+    payment_filter = request.args.get("payment_method", "").strip().lower()
+    if payment_filter not in {"cash", "card", "upi", "other"}:
+        payment_filter = ""
+
+    connection = None
+    cursor = None
+    sale_rows = []
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        conditions = []
+        parameters = []
+        if search_term:
+            pattern = f"%{search_term}%"
+            conditions.append(
+                "(CAST(s.sale_id AS CHAR) LIKE %s OR s.customer_name LIKE %s "
+                "OR s.customer_phone LIKE %s)"
+            )
+            parameters.extend([pattern, pattern, pattern])
+        if payment_filter:
+            conditions.append("s.payment_method = %s")
+            parameters.append(payment_filter)
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        cursor.execute(
+            f"""
+            SELECT s.sale_id, s.customer_name, s.customer_phone, s.sale_date,
+                   s.total_amount, s.payment_method, s.status, s.created_at,
+                   u.full_name
+            FROM sales AS s
+            INNER JOIN users AS u ON s.user_id = u.user_id
+            {where_clause}
+            ORDER BY s.sale_date DESC, s.sale_id DESC
+            """,
+            tuple(parameters),
+        )
+        sale_rows = cursor.fetchall()
+    except mysql.connector.Error:
+        app.logger.exception("Database error while loading sales")
+        flash("Sales are temporarily unavailable. Please try again.", "error")
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+    return render_template(
+        "sales.html",
+        page_title="Sales Management",
+        sales=sale_rows,
+        search_term=search_term,
+        payment_filter=payment_filter,
+    )
+
+
+@app.route("/sales/add", methods=["GET", "POST"])
+def add_sale():
+    """Create a completed sale and reduce stock atomically."""
+    if "user_id" not in session:
+        flash("Please log in to manage sales.", "error")
+        return redirect(url_for("login"))
+
+    form_data = empty_sale_form()
+    if request.method == "POST":
+        form_data = sale_form_from_request()
+        validation_error, sale_items, total_amount = validate_sale_form(form_data)
+        if validation_error:
+            flash(validation_error, "error")
+            return render_sale_form(form_data)
+
+        connection = None
+        cursor = None
+        try:
+            connection = get_db_connection()
+            connection.start_transaction()
+            cursor = connection.cursor(dictionary=True)
+            cursor.execute(
+                """
+                INSERT INTO sales
+                    (user_id, customer_name, customer_phone, sale_date,
+                     total_amount, payment_method, status, notes)
+                VALUES (%s, %s, %s, %s, %s, %s, 'completed', %s)
+                """,
+                (
+                    session["user_id"],
+                    form_data["customer_name"] or None,
+                    form_data["customer_phone"] or None,
+                    form_data["sale_date"],
+                    total_amount,
+                    form_data["payment_method"],
+                    form_data["notes"] or None,
+                ),
+            )
+            sale_id = cursor.lastrowid
+
+            for item in sale_items:
+                cursor.execute(
+                    """
+                    SELECT product_id, product_name, current_stock, is_active
+                    FROM products
+                    WHERE product_id = %s
+                    FOR UPDATE
+                    """,
+                    (item["product_id"],),
+                )
+                product = cursor.fetchone()
+                if product is None or not product["is_active"]:
+                    raise SaleValidationError(
+                        "Every selected product must exist and be active."
+                    )
+                current_stock = Decimal(str(product["current_stock"]))
+                if Decimal(item["quantity"]) > current_stock:
+                    raise SaleValidationError(
+                        f"Insufficient stock for {product['product_name']}. "
+                        f"Available: {product['current_stock']}, "
+                        f"requested: {item['quantity']}."
+                    )
+                new_stock = current_stock - Decimal(item["quantity"])
+                cursor.execute(
+                    """
+                    UPDATE products SET current_stock = %s
+                    WHERE product_id = %s
+                    """,
+                    (new_stock, item["product_id"]),
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO sale_items
+                        (sale_id, product_id, quantity, unit_price, line_total)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (
+                        sale_id,
+                        item["product_id"],
+                        item["quantity"],
+                        item["unit_price"],
+                        item["line_total"],
+                    ),
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO stock_transactions
+                        (product_id, user_id, sale_id, transaction_type,
+                         quantity, balance_after, notes)
+                    VALUES (%s, %s, %s, 'sale', %s, %s, %s)
+                    """,
+                    (
+                        item["product_id"],
+                        session["user_id"],
+                        sale_id,
+                        item["quantity"],
+                        new_stock,
+                        f"Stock reduced for sale #{sale_id}",
+                    ),
+                )
+            connection.commit()
+        except SaleValidationError as error:
+            if connection is not None:
+                connection.rollback()
+            flash(str(error), "error")
+            return render_sale_form(form_data)
+        except mysql.connector.Error:
+            if connection is not None:
+                connection.rollback()
+            app.logger.exception("Database error while creating sale")
+            flash("The sale could not be completed. No stock was changed.", "error")
+            return render_sale_form(form_data)
+        finally:
+            if cursor is not None:
+                cursor.close()
+            if connection is not None and connection.is_connected():
+                connection.close()
+
+        flash("Sale completed and stock updated.", "success")
+        return redirect(url_for("sale_detail", sale_id=sale_id))
+
+    return render_sale_form(form_data)
+
+
+@app.get("/sales/<int:sale_id>")
+def sale_detail(sale_id):
+    """Display one sale and its items."""
+    if "user_id" not in session:
+        flash("Please log in to access sales.", "error")
+        return redirect(url_for("login"))
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT s.sale_id, s.customer_name, s.customer_phone, s.sale_date,
+                   s.total_amount, s.payment_method, s.status, s.notes,
+                   u.full_name
+            FROM sales AS s
+            INNER JOIN users AS u ON s.user_id = u.user_id
+            WHERE s.sale_id = %s
+            """,
+            (sale_id,),
+        )
+        sale = cursor.fetchone()
+        if sale is None:
+            flash("Sale not found.", "error")
+            return redirect(url_for("sales"))
+        cursor.execute(
+            """
+            SELECT si.quantity, si.unit_price, si.line_total,
+                   p.product_name, p.sku
+            FROM sale_items AS si
+            INNER JOIN products AS p ON si.product_id = p.product_id
+            WHERE si.sale_id = %s
+            ORDER BY si.sale_item_id
+            """,
+            (sale_id,),
+        )
+        items = cursor.fetchall()
+    except mysql.connector.Error:
+        app.logger.exception("Database error while loading sale %s", sale_id)
+        flash("The sale could not be loaded. Please try again.", "error")
+        return redirect(url_for("sales"))
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+    return render_template(
+        "sale_detail.html",
+        page_title="Sale Details",
+        sale=sale,
+        items=items,
+    )
+
+
+@app.post("/sales/<int:sale_id>/cancel")
+def cancel_sale(sale_id):
+    """Cancel a completed sale and restore stock atomically."""
+    if "user_id" not in session:
+        flash("Please log in to manage sales.", "error")
+        return redirect(url_for("login"))
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        connection.start_transaction()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT sale_id, status
+            FROM sales
+            WHERE sale_id = %s
+            FOR UPDATE
+            """,
+            (sale_id,),
+        )
+        sale = cursor.fetchone()
+        if sale is None:
+            connection.rollback()
+            flash("Sale not found.", "error")
+            return redirect(url_for("sales"))
+        if sale["status"] == "cancelled":
+            connection.rollback()
+            flash("Sale has already been cancelled.", "error")
+            return redirect(url_for("sale_detail", sale_id=sale_id))
+
+        cursor.execute(
+            """
+            SELECT product_id, quantity
+            FROM sale_items
+            WHERE sale_id = %s
+            ORDER BY sale_item_id
+            """,
+            (sale_id,),
+        )
+        items = cursor.fetchall()
+        for item in items:
+            cursor.execute(
+                """
+                SELECT current_stock
+                FROM products
+                WHERE product_id = %s
+                FOR UPDATE
+                """,
+                (item["product_id"],),
+            )
+            product = cursor.fetchone()
+            if product is None:
+                raise mysql.connector.Error("Sale item product no longer exists")
+            new_stock = Decimal(str(product["current_stock"])) + Decimal(
+                str(item["quantity"])
+            )
+            cursor.execute(
+                "UPDATE products SET current_stock = %s WHERE product_id = %s",
+                (new_stock, item["product_id"]),
+            )
+            cursor.execute(
+                """
+                INSERT INTO stock_transactions
+                    (product_id, user_id, sale_id, transaction_type,
+                     quantity, balance_after, notes)
+                VALUES (%s, %s, %s, 'return', %s, %s, %s)
+                """,
+                (
+                    item["product_id"],
+                    session["user_id"],
+                    sale_id,
+                    item["quantity"],
+                    new_stock,
+                    f"Stock restored after cancelling sale #{sale_id}",
+                ),
+            )
+        cursor.execute(
+            "UPDATE sales SET status = 'cancelled' WHERE sale_id = %s",
+            (sale_id,),
+        )
+        connection.commit()
+    except mysql.connector.Error:
+        if connection is not None:
+            connection.rollback()
+        app.logger.exception("Database error while cancelling sale %s", sale_id)
+        flash("The sale could not be cancelled. No stock was changed.", "error")
+        return redirect(url_for("sale_detail", sale_id=sale_id))
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+    flash("Sale cancelled and stock restored.", "success")
+    return redirect(url_for("sale_detail", sale_id=sale_id))
+
+
+class SaleValidationError(Exception):
+    """Expected validation failure during an atomic sale transaction."""
+
+
+def empty_sale_form():
+    """Return default values used by the sale form."""
+    return {
+        "customer_name": "",
+        "customer_phone": "",
+        "sale_date": datetime.now().strftime("%Y-%m-%d"),
+        "payment_method": "cash",
+        "notes": "",
+        "items": [{"product_id": "", "quantity": "", "unit_price": ""}],
+    }
+
+
+def sale_form_from_request():
+    """Read sale header and repeated item fields from the form."""
+    product_ids = request.form.getlist("product_id[]")
+    quantities = request.form.getlist("quantity[]")
+    unit_prices = request.form.getlist("unit_price[]")
+    item_count = max(len(product_ids), len(quantities), len(unit_prices))
+    items = []
+    for index in range(item_count):
+        items.append(
+            {
+                "product_id": product_ids[index] if index < len(product_ids) else "",
+                "quantity": quantities[index] if index < len(quantities) else "",
+                "unit_price": unit_prices[index] if index < len(unit_prices) else "",
+            }
+        )
+    return {
+        "customer_name": request.form.get("customer_name", "").strip(),
+        "customer_phone": request.form.get("customer_phone", "").strip(),
+        "sale_date": request.form.get("sale_date", "").strip(),
+        "payment_method": request.form.get("payment_method", "").strip().lower(),
+        "notes": request.form.get("notes", "").strip(),
+        "items": items or [{"product_id": "", "quantity": "", "unit_price": ""}],
+    }
+
+
+def validate_sale_form(form_data):
+    """Validate sale fields and calculate trusted totals server-side."""
+    if len(form_data["customer_name"]) > 100:
+        return "Customer name must be 100 characters or fewer.", [], Decimal("0.00")
+    if len(form_data["customer_phone"]) > 30:
+        return "Customer phone must be 30 characters or fewer.", [], Decimal("0.00")
+    if form_data["payment_method"] not in {"cash", "card", "upi", "other"}:
+        return "Please select a valid payment method.", [], Decimal("0.00")
+    try:
+        datetime.strptime(form_data["sale_date"], "%Y-%m-%d")
+    except (TypeError, ValueError):
+        return "Please enter a valid sale date.", [], Decimal("0.00")
+    if not form_data["items"]:
+        return "At least one sale item is required.", [], Decimal("0.00")
+
+    sale_items = []
+    total_amount = Decimal("0.00")
+    for item in form_data["items"]:
+        if not item["product_id"]:
+            return "Every sale item must have a product.", [], Decimal("0.00")
+        try:
+            product_id = int(item["product_id"])
+            quantity = int(item["quantity"])
+        except (TypeError, ValueError):
+            return "Product IDs and quantities must be valid integers.", [], Decimal("0.00")
+        if product_id <= 0 or quantity <= 0 or str(quantity) != item["quantity"]:
+            return "Quantity must be a positive integer.", [], Decimal("0.00")
+        try:
+            unit_price = Decimal(item["unit_price"])
+        except (InvalidOperation, TypeError):
+            return "Unit price must be a valid number.", [], Decimal("0.00")
+        if not unit_price.is_finite() or unit_price < 0 or unit_price.as_tuple().exponent < -2:
+            return (
+                "Unit price must be non-negative with at most 2 decimal places.",
+                [],
+                Decimal("0.00"),
+            )
+        line_total = (Decimal(quantity) * unit_price).quantize(Decimal("0.01"))
+        total_amount += line_total
+        sale_items.append(
+            {
+                "product_id": product_id,
+                "quantity": quantity,
+                "unit_price": unit_price,
+                "line_total": line_total,
+            }
+        )
+    form_data["items"] = sale_items
+    return None, sale_items, total_amount.quantize(Decimal("0.01"))
+
+
+def load_sale_options():
+    """Load active products for the sale form."""
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT product_id, product_name, sku, current_stock, selling_price
+            FROM products
+            WHERE is_active = TRUE
+            ORDER BY product_name
+            """
+        )
+        return cursor.fetchall()
+    except mysql.connector.Error:
+        app.logger.exception("Database error while loading sale form options")
+        return []
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+
+def render_sale_form(form_data):
+    """Render the sale form with active product options."""
+    return render_template(
+        "sale_form.html",
+        page_title="New Sale",
+        products=load_sale_options(),
+        sale=form_data,
+    )
+
+
 @app.post("/logout")
 def logout():
     """End the current session and return the user to the login page."""

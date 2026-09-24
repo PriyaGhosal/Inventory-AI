@@ -28,6 +28,9 @@ Inventory-AI/
 ├── templates/purchases.html
 ├── templates/purchase_form.html
 ├── templates/purchase_detail.html
+├── templates/sales.html
+├── templates/sale_form.html
+├── templates/sale_detail.html
 ├── static/css/style.css
 ├── static/js/script.js
 └── utils/helpers.py
@@ -104,3 +107,11 @@ not change stock. Receiving a purchase uses one database transaction to update
 all product stock values, create matching `stock_transactions` records, and
 mark the purchase as received. Cancelling a pending purchase does not change
 stock.
+
+## Sales management
+
+The protected **Sales** module records completed sales with multiple items,
+reduces stock atomically, and creates matching `stock_transactions` rows.
+Sales can be searched by sale ID, customer name, or phone, and filtered by
+payment method. Cancelling a completed sale restores stock in one transaction
+and records return transactions. A cancelled sale cannot be cancelled again.

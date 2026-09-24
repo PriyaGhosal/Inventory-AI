@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="form-card purchase-form-card">
+    <p class="eyebrow">Inventory operations</p>
+    <h1>New Sale</h1>
+    <p class="muted">Stock is reduced immediately when the sale is completed.</p>
+    <form method="post" action="{{ url_for('add_sale') }}">
+        <label for="customer_name">Customer Name</label>
+        <input id="customer_name" name="customer_name" type="text" maxlength="100" value="{{ sale.customer_name }}">
+
+        <label for="customer_phone">Customer Phone</label>
+        <input id="customer_phone" name="customer_phone" type="tel" maxlength="30" value="{{ sale.customer_phone }}">
+
+        <label for="sale_date">Sale Date</label>
+        <input id="sale_date" name="sale_date" type="date" value="{{ sale.sale_date }}" required>
+
+        <label for="payment_method">Payment Method</label>
+        <select id="payment_method" name="payment_method" required>
+            {% for method in ("cash", "card", "upi", "other") %}
+                <option value="{{ method }}" {% if sale.payment_method == method %}selected{% endif %}>{{ method|title }}</option>
+            {% endfor %}
+        </select>
+
+        <label for="notes">Notes</label>
+        <textarea id="notes" name="notes" rows="3">{{ sale.notes }}</textarea>
+
+        <div class="items-heading">
+            <h2>Sale Items</h2>
+            <button class="button button-small" id="add-sale-item" type="button">Add Item</button>
+        </div>
+        <div id="sale-items">
+            {% for item in sale["items"] %}
+            <div class="sale-item-row">
+                <div>
+                    <label>Product</label>
+                    <select name="product_id[]" class="sale-product" required>
+                        <option value="">Select an active product</option>
+                        {% for product in products %}
+                            <option value="{{ product.product_id }}" data-stock="{{ product.current_stock }}" data-price="{{ product.selling_price }}" {% if item.product_id|string == product.product_id|string %}selected{% endif %}>
+                                {{ product.product_name }} ({{ product.sku }}) — stock: {{ product.current_stock }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                    <small class="available-stock">Available stock: —</small>
+                </div>
+                <div><label>Quantity</label><input class="sale-quantity" name="quantity[]" type="number" min="1" step="1" value="{{ item.quantity }}" required></div>
+                <div><label>Unit Price</label><input class="sale-unit-price" name="unit_price[]" type="number" min="0" step="0.01" value="{{ item.unit_price }}" required></div>
+                <div><label>Line Total</label><output class="sale-line-total">₹0.00</output></div>
+                <button class="button button-small button-danger remove-sale-item" type="button">Remove</button>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="purchase-total"><span>Total</span><strong id="sale-total">₹0.00</strong></div>
+        <div class="form-actions">
+            <button class="button" type="submit">Complete Sale</button>
+            <a class="button button-secondary" href="{{ url_for('sales') }}">Cancel</a>
+        </div>
+    </form>
+</section>
+
+<template id="sale-item-template">
+    <div class="sale-item-row">
+        <div>
+            <label>Product</label>
+            <select name="product_id[]" class="sale-product" required>
+                <option value="">Select an active product</option>
+                {% for product in products %}
+                    <option value="{{ product.product_id }}" data-stock="{{ product.current_stock }}" data-price="{{ product.selling_price }}">{{ product.product_name }} ({{ product.sku }}) — stock: {{ product.current_stock }}</option>
+                {% endfor %}
+            </select>
+            <small class="available-stock">Available stock: —</small>
+        </div>
+        <div><label>Quantity</label><input class="sale-quantity" name="quantity[]" type="number" min="1" step="1" required></div>
+        <div><label>Unit Price</label><input class="sale-unit-price" name="unit_price[]" type="number" min="0" step="0.01" required></div>
+        <div><label>Line Total</label><output class="sale-line-total">₹0.00</output></div>
+        <button class="button button-small button-danger remove-sale-item" type="button">Remove</button>
+    </div>
+</template>
+{% endblock %}

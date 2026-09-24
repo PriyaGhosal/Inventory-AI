@@ -240,6 +240,45 @@ nav a:hover {
     color: #9b2525;
 }
 
+.payment-badge {
+    background: var(--pale-blue);
+    border-radius: 999px;
+    color: var(--navy);
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 0.3rem 0.6rem;
+}
+
+.sale-item-row {
+    align-items: end;
+    border-bottom: 1px solid var(--border);
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: minmax(220px, 2fr) minmax(100px, 1fr) minmax(120px, 1fr) minmax(100px, 1fr) auto;
+    padding: 1rem 0;
+}
+
+.sale-item-row select,
+.sale-item-row input {
+    width: 100%;
+}
+
+.sale-item-row label {
+    display: block;
+}
+
+.sale-line-total {
+    display: block;
+    font-weight: 600;
+    padding: 0.75rem 0;
+}
+
+.available-stock {
+    color: var(--muted);
+    display: block;
+    margin-top: 0.35rem;
+}
+
 .search-form {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -562,6 +601,14 @@ textarea:focus {
     }
 
     .purchase-item-row > div:first-child {
+        grid-column: 1 / -1;
+    }
+
+    .sale-item-row {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .sale-item-row > div:first-child {
         grid-column: 1 / -1;
     }
 }

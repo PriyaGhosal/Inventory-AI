@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-heading">
+    <div><p class="eyebrow">Inventory operations</p><h1>Sale #{{ sale.sale_id }}</h1></div>
+    <a class="button button-secondary" href="{{ url_for('sales') }}">Back to Sales</a>
+</section>
+<section class="detail-card">
+    <div class="detail-grid">
+        <div><span class="summary-label">Customer</span><strong>{{ sale.customer_name or "Walk-in customer" }}</strong></div>
+        <div><span class="summary-label">Phone</span><strong>{{ sale.customer_phone or "—" }}</strong></div>
+        <div><span class="summary-label">Sale Date</span><strong>{{ sale.sale_date.strftime("%d %b %Y") }}</strong></div>
+        <div><span class="summary-label">Payment</span><strong>{{ sale.payment_method|upper }}</strong></div>
+        <div><span class="summary-label">Status</span><strong><span class="status-badge status-{{ sale.status }}">{{ sale.status|title }}</span></strong></div>
+        <div><span class="summary-label">Created By</span><strong>{{ sale.full_name }}</strong></div>
+    </div>
+    {% if sale.notes %}<p class="detail-notes"><strong>Notes:</strong> {{ sale.notes }}</p>{% endif %}
+</section>
+<div class="table-card detail-items-card">
+    <div class="table-wrapper">
+        <table>
+            <thead><tr><th>Product</th><th>SKU</th><th>Quantity</th><th>Unit Price</th><th>Line Total</th></tr></thead>
+            <tbody>
+                {% for item in items %}
+                <tr><td>{{ item.product_name }}</td><td>{{ item.sku }}</td><td>{{ item.quantity }}</td><td>₹{{ "%.2f"|format(item.unit_price) }}</td><td>₹{{ "%.2f"|format(item.line_total) }}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="purchase-total detail-total"><span>Total Amount</span><strong>₹{{ "%.2f"|format(sale.total_amount) }}</strong></div>
+</div>
+{% if sale.status == "completed" %}
+<div class="form-actions detail-actions">
+    <form method="post" action="{{ url_for('cancel_sale', sale_id=sale.sale_id) }}"><button class="button button-danger" type="submit">Cancel Sale</button></form>
+</div>
+{% endif %}
+{% endblock %}
