@@ -3,6 +3,7 @@
 import click
 import mysql.connector
 import re
+from decimal import Decimal, InvalidOperation
 from dotenv import load_dotenv
 from flask import Flask, flash, redirect, render_template, session, url_for
 from flask import request
@@ -665,6 +666,433 @@ def render_supplier_form(supplier, form_title, submit_label):
         form_title=form_title,
         submit_label=submit_label,
         supplier=supplier,
+    )
+
+
+@app.get("/products")
+def products():
+    """Display products with optional text search and active-status filtering."""
+    if "user_id" not in session:
+        flash("Please log in to access products.", "error")
+        return redirect(url_for("login"))
+
+    search_term = request.args.get("search", "").strip()
+    status_filter = request.args.get("status", "").strip().lower()
+    if status_filter not in {"active", "inactive"}:
+        status_filter = ""
+
+    connection = None
+    cursor = None
+    product_rows = []
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        conditions = []
+        parameters = []
+        if search_term:
+            search_pattern = f"%{search_term}%"
+            conditions.append(
+                """
+                (p.product_name LIKE %s OR p.sku LIKE %s
+                 OR c.category_name LIKE %s OR s.supplier_name LIKE %s)
+                """
+            )
+            parameters.extend(
+                [search_pattern, search_pattern, search_pattern, search_pattern]
+            )
+        if status_filter:
+            conditions.append("p.is_active = %s")
+            parameters.append(status_filter == "active")
+
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        cursor.execute(
+            f"""
+            SELECT p.product_id, p.product_name, p.sku, p.description, p.unit,
+                   p.cost_price, p.selling_price, p.current_stock,
+                   p.reorder_level, p.is_active, p.created_at,
+                   c.category_name, s.supplier_name
+            FROM products AS p
+            INNER JOIN categories AS c ON p.category_id = c.category_id
+            LEFT JOIN suppliers AS s ON p.supplier_id = s.supplier_id
+            {where_clause}
+            ORDER BY p.product_name ASC
+            """,
+            tuple(parameters),
+        )
+        product_rows = cursor.fetchall()
+    except mysql.connector.Error:
+        app.logger.exception("Database error while loading products")
+        flash("Products are temporarily unavailable. Please try again.", "error")
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+    return render_template(
+        "products.html",
+        page_title="Product Management",
+        products=product_rows,
+        search_term=search_term,
+        status_filter=status_filter,
+    )
+
+
+@app.route("/products/add", methods=["GET", "POST"])
+def add_product():
+    """Display and process the add-product form."""
+    if "user_id" not in session:
+        flash("Please log in to manage products.", "error")
+        return redirect(url_for("login"))
+
+    product = empty_product()
+    if request.method == "POST":
+        product = product_from_form()
+        validation_error, warning = validate_product_input(product)
+        if validation_error:
+            flash(validation_error, "error")
+            return render_product_form(product, "Add Product", "Add Product")
+        if warning:
+            flash(warning, "warning")
+
+        connection = None
+        cursor = None
+        try:
+            connection = get_db_connection()
+            cursor = connection.cursor()
+            relationship_error = validate_product_relationships(cursor, product)
+            if relationship_error:
+                flash(relationship_error, "error")
+                return render_product_form(product, "Add Product", "Add Product")
+            cursor.execute(
+                """
+                INSERT INTO products
+                    (category_id, supplier_id, product_name, sku, description,
+                     unit, cost_price, selling_price, current_stock,
+                     reorder_level, is_active)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE)
+                """,
+                product_values(product),
+            )
+            connection.commit()
+        except mysql.connector.IntegrityError:
+            if connection is not None:
+                connection.rollback()
+            flash("A product with this SKU already exists.", "error")
+            return render_product_form(product, "Add Product", "Add Product")
+        except mysql.connector.Error:
+            if connection is not None:
+                connection.rollback()
+            app.logger.exception("Database error while adding product")
+            flash("The product could not be added. Please try again.", "error")
+            return render_product_form(product, "Add Product", "Add Product")
+        finally:
+            if cursor is not None:
+                cursor.close()
+            if connection is not None and connection.is_connected():
+                connection.close()
+
+        flash("Product added successfully.", "success")
+        return redirect(url_for("products"))
+
+    return render_product_form(product, "Add Product", "Add Product")
+
+
+@app.route("/products/edit/<int:product_id>", methods=["GET", "POST"])
+def edit_product(product_id):
+    """Display and process the edit form for one product."""
+    if "user_id" not in session:
+        flash("Please log in to manage products.", "error")
+        return redirect(url_for("login"))
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT product_id, category_id, supplier_id, product_name, sku,
+                   description, unit, cost_price, selling_price, current_stock,
+                   reorder_level, is_active
+            FROM products
+            WHERE product_id = %s
+            """,
+            (product_id,),
+        )
+        product = cursor.fetchone()
+    except mysql.connector.Error:
+        app.logger.exception("Database error while loading product %s", product_id)
+        flash("The product could not be loaded. Please try again.", "error")
+        return redirect(url_for("products"))
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+    if product is None:
+        flash("Product not found.", "error")
+        return redirect(url_for("products"))
+
+    if request.method == "POST":
+        submitted_product = product_from_form()
+        product.update(submitted_product)
+        validation_error, warning = validate_product_input(product)
+        if validation_error:
+            flash(validation_error, "error")
+            return render_product_form(product, "Edit Product", "Save Changes")
+        if warning:
+            flash(warning, "warning")
+
+        connection = None
+        cursor = None
+        try:
+            connection = get_db_connection()
+            cursor = connection.cursor()
+            relationship_error = validate_product_relationships(cursor, product)
+            if relationship_error:
+                flash(relationship_error, "error")
+                return render_product_form(product, "Edit Product", "Save Changes")
+            cursor.execute(
+                """
+                UPDATE products
+                SET category_id = %s, supplier_id = %s, product_name = %s,
+                    sku = %s, description = %s, unit = %s, cost_price = %s,
+                    selling_price = %s, current_stock = %s, reorder_level = %s
+                WHERE product_id = %s
+                """,
+                product_values(product) + (product_id,),
+            )
+            connection.commit()
+        except mysql.connector.IntegrityError:
+            if connection is not None:
+                connection.rollback()
+            flash("A product with this SKU already exists.", "error")
+            return render_product_form(product, "Edit Product", "Save Changes")
+        except mysql.connector.Error:
+            if connection is not None:
+                connection.rollback()
+            app.logger.exception("Database error while editing product %s", product_id)
+            flash("The product could not be updated. Please try again.", "error")
+            return render_product_form(product, "Edit Product", "Save Changes")
+        finally:
+            if cursor is not None:
+                cursor.close()
+            if connection is not None and connection.is_connected():
+                connection.close()
+
+        flash("Product updated successfully.", "success")
+        return redirect(url_for("products"))
+
+    return render_product_form(product, "Edit Product", "Save Changes")
+
+
+@app.post("/products/toggle/<int:product_id>")
+def toggle_product(product_id):
+    """Activate or deactivate a product without deleting its history."""
+    if "user_id" not in session:
+        flash("Please log in to manage products.", "error")
+        return redirect(url_for("login"))
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT is_active FROM products WHERE product_id = %s",
+            (product_id,),
+        )
+        product = cursor.fetchone()
+        if product is None:
+            flash("Product not found.", "error")
+            return redirect(url_for("products"))
+
+        new_status = not product["is_active"]
+        cursor.execute(
+            "UPDATE products SET is_active = %s WHERE product_id = %s",
+            (new_status, product_id),
+        )
+        connection.commit()
+    except mysql.connector.Error:
+        if connection is not None:
+            connection.rollback()
+        app.logger.exception("Database error while toggling product %s", product_id)
+        flash("The product status could not be changed. Please try again.", "error")
+        return redirect(url_for("products"))
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+    flash("Product activated." if new_status else "Product deactivated.", "success")
+    return redirect(url_for("products"))
+
+
+def empty_product():
+    """Return the fields used by the product form."""
+    return {
+        "product_name": "",
+        "sku": "",
+        "category_id": "",
+        "supplier_id": "",
+        "description": "",
+        "unit": "piece",
+        "cost_price": "",
+        "selling_price": "",
+        "current_stock": "0",
+        "reorder_level": "0",
+    }
+
+
+def product_from_form():
+    """Read product fields from the browser and trim text inputs."""
+    return {
+        "product_name": request.form.get("product_name", "").strip(),
+        "sku": request.form.get("sku", "").strip(),
+        "category_id": request.form.get("category_id", "").strip(),
+        "supplier_id": request.form.get("supplier_id", "").strip(),
+        "description": request.form.get("description", "").strip(),
+        "unit": request.form.get("unit", "").strip(),
+        "cost_price": request.form.get("cost_price", "").strip(),
+        "selling_price": request.form.get("selling_price", "").strip(),
+        "current_stock": request.form.get("current_stock", "").strip(),
+        "reorder_level": request.form.get("reorder_level", "").strip(),
+    }
+
+
+def validate_product_input(product):
+    """Return an error and optional warning for product form values."""
+    text_limits = (
+        ("product_name", 150, "Product name"),
+        ("sku", 50, "SKU"),
+        ("description", 500, "Description"),
+        ("unit", 30, "Unit"),
+    )
+    if not product["product_name"]:
+        return "Product name is required.", None
+    if not product["sku"]:
+        return "SKU is required.", None
+    for field_name, maximum, label in text_limits:
+        if len(product[field_name]) > maximum:
+            return f"{label} must be {maximum} characters or fewer.", None
+
+    parsed_prices = []
+    for field_name, label in (
+        ("cost_price", "Cost price"),
+        ("selling_price", "Selling price"),
+    ):
+        try:
+            value = Decimal(product[field_name])
+        except (InvalidOperation, TypeError):
+            return f"{label} must be a valid number.", None
+        if not value.is_finite() or value < 0 or value.as_tuple().exponent < -2:
+            return f"{label} must be non-negative with at most 2 decimal places.", None
+        parsed_prices.append(value)
+
+    for field_name, label in (
+        ("current_stock", "Current stock"),
+        ("reorder_level", "Reorder level"),
+    ):
+        try:
+            value = int(product[field_name])
+        except (TypeError, ValueError):
+            return f"{label} must be a non-negative integer.", None
+        if value < 0 or str(value) != product[field_name]:
+            return f"{label} must be a non-negative integer.", None
+
+    product["_cost_price"] = parsed_prices[0]
+    product["_selling_price"] = parsed_prices[1]
+    if parsed_prices[1] < parsed_prices[0]:
+        return None, "Warning: Selling price is lower than cost price."
+    return None, None
+
+
+def validate_product_relationships(cursor, product):
+    """Verify submitted category and optional supplier IDs exist."""
+    try:
+        category_id = int(product["category_id"])
+    except (TypeError, ValueError):
+        return "Please select a valid category."
+    cursor.execute(
+        "SELECT category_id FROM categories WHERE category_id = %s",
+        (category_id,),
+    )
+    if cursor.fetchone() is None:
+        return "Please select an existing category."
+    product["_category_id"] = category_id
+
+    supplier_id = None
+    if product["supplier_id"]:
+        try:
+            supplier_id = int(product["supplier_id"])
+        except (TypeError, ValueError):
+            return "Please select a valid supplier."
+        cursor.execute(
+            "SELECT supplier_id FROM suppliers WHERE supplier_id = %s",
+            (supplier_id,),
+        )
+        if cursor.fetchone() is None:
+            return "Please select an existing supplier."
+    product["_supplier_id"] = supplier_id
+    return None
+
+
+def product_values(product):
+    """Return validated product fields in database column order."""
+    return (
+        product["_category_id"],
+        product["_supplier_id"],
+        product["product_name"],
+        product["sku"],
+        product["description"] or None,
+        product["unit"] or None,
+        product["_cost_price"],
+        product["_selling_price"],
+        int(product["current_stock"]),
+        int(product["reorder_level"]),
+    )
+
+
+def load_product_options():
+    """Load categories and suppliers for the product form dropdowns."""
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT category_id, category_name FROM categories ORDER BY category_name"
+        )
+        categories = cursor.fetchall()
+        cursor.execute(
+            "SELECT supplier_id, supplier_name FROM suppliers ORDER BY supplier_name"
+        )
+        suppliers = cursor.fetchall()
+        return categories, suppliers
+    except mysql.connector.Error:
+        app.logger.exception("Database error while loading product form options")
+        return [], []
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+
+def render_product_form(product, form_title, submit_label):
+    """Render the shared add/edit product form."""
+    categories, suppliers = load_product_options()
+    return render_template(
+        "product_form.html",
+        page_title=form_title,
+        form_title=form_title,
+        submit_label=submit_label,
+        product=product,
+        categories=categories,
+        suppliers=suppliers,
     )
 
 

@@ -123,6 +123,10 @@ nav a:hover {
     max-width: 620px;
 }
 
+.product-form-card {
+    max-width: 720px;
+}
+
 .search-form {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -144,6 +148,15 @@ nav a:hover {
 
 .search-controls input {
     flex: 1;
+}
+
+.search-controls select,
+select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    font: inherit;
+    padding: 0.75rem;
 }
 
 .search-controls .button {
@@ -203,6 +216,14 @@ tbody tr:last-child td {
     background: #9f2f2f;
 }
 
+.button-success {
+    background: #2f8f55;
+}
+
+.button-success:hover {
+    background: #246e41;
+}
+
 .button-secondary {
     background: #e8eef5;
     color: var(--navy);
@@ -219,6 +240,44 @@ tbody tr:last-child td {
 .empty-state h2 {
     color: var(--navy);
     margin-top: 0;
+}
+
+.products-table {
+    min-width: 1250px;
+}
+
+.status-badge {
+    border-radius: 999px;
+    display: inline-block;
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 0.3rem 0.6rem;
+}
+
+.status-active {
+    background: #edf9f0;
+    color: #246b35;
+}
+
+.status-inactive {
+    background: #eef1f5;
+    color: #65748b;
+}
+
+.stock-low {
+    color: #b02a2a;
+    font-weight: 700;
+}
+
+.low-stock-label {
+    background: #fff0f0;
+    border-radius: 4px;
+    color: #9b2525;
+    display: block;
+    font-size: 0.7rem;
+    margin-top: 0.25rem;
+    padding: 0.15rem 0.3rem;
+    width: fit-content;
 }
 
 .flash-list {
@@ -240,6 +299,12 @@ tbody tr:last-child td {
     background: #edf9f0;
     border: 1px solid #b8dfc0;
     color: #246b35;
+}
+
+.flash-warning {
+    background: #fff8e6;
+    border: 1px solid #efd58a;
+    color: #795b00;
 }
 
 .account-summary {
@@ -327,6 +392,16 @@ textarea:focus {
     outline: 2px solid var(--pale-blue);
 }
 
+.form-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.form-grid input {
+    width: 100%;
+}
+
 .form-actions {
     display: flex;
     gap: 0.75rem;
@@ -359,5 +434,9 @@ textarea:focus {
 
     .search-controls .button {
         width: 100%;
+    }
+
+    .form-grid {
+        grid-template-columns: 1fr;
     }
 }

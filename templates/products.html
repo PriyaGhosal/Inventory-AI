@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-heading">
+    <div>
+        <p class="eyebrow">Inventory setup</p>
+        <h1>Product Management</h1>
+        <p class="muted">Maintain product details and stock thresholds.</p>
+    </div>
+    <a class="button" href="{{ url_for('add_product') }}">Add Product</a>
+</section>
+
+<form class="search-form" method="get" action="{{ url_for('products') }}">
+    <label for="product-search">Search products</label>
+    <div class="search-controls product-search-controls">
+        <input
+            id="product-search"
+            name="search"
+            type="search"
+            value="{{ search_term }}"
+            placeholder="Product, SKU, category, or supplier"
+        >
+        <select name="status" aria-label="Filter by status">
+            <option value="">All statuses</option>
+            <option value="active" {% if status_filter == "active" %}selected{% endif %}>Active</option>
+            <option value="inactive" {% if status_filter == "inactive" %}selected{% endif %}>Inactive</option>
+        </select>
+        <button class="button" type="submit">Filter</button>
+        {% if search_term or status_filter %}
+            <a class="button button-secondary" href="{{ url_for('products') }}">Clear</a>
+        {% endif %}
+    </div>
+</form>
+
+{% if products %}
+<div class="table-card">
+    <div class="table-wrapper">
+        <table class="products-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Product Name</th>
+                    <th>SKU</th>
+                    <th>Category</th>
+                    <th>Supplier</th>
+                    <th>Unit</th>
+                    <th>Cost Price</th>
+                    <th>Selling Price</th>
+                    <th>Current Stock</th>
+                    <th>Reorder Level</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for product in products %}
+                <tr>
+                    <td>{{ product.product_id }}</td>
+                    <td>{{ product.product_name }}</td>
+                    <td>{{ product.sku }}</td>
+                    <td>{{ product.category_name }}</td>
+                    <td>{{ product.supplier_name or "—" }}</td>
+                    <td>{{ product.unit or "—" }}</td>
+                    <td>{{ "%.2f"|format(product.cost_price) }}</td>
+                    <td>{{ "%.2f"|format(product.selling_price) }}</td>
+                    <td>
+                        <span class="{% if product.current_stock <= product.reorder_level %}stock-low{% endif %}">
+                            {{ product.current_stock }}
+                        </span>
+                        {% if product.current_stock <= product.reorder_level %}
+                            <span class="low-stock-label">Low Stock</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ product.reorder_level }}</td>
+                    <td>
+                        <span class="status-badge {% if product.is_active %}status-active{% else %}status-inactive{% endif %}">
+                            {{ "Active" if product.is_active else "Inactive" }}
+                        </span>
+                    </td>
+                    <td class="actions">
+                        <a class="button button-small" href="{{ url_for('edit_product', product_id=product.product_id) }}">Edit</a>
+                        <form method="post" action="{{ url_for('toggle_product', product_id=product.product_id) }}">
+                            <button class="button button-small {% if product.is_active %}button-danger{% else %}button-success{% endif %}" type="submit">
+                                {{ "Deactivate" if product.is_active else "Activate" }}
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<section class="empty-state">
+    <h2>{% if search_term or status_filter %}No matching products{% else %}No products yet{% endif %}</h2>
+    <p class="muted">
+        {% if search_term or status_filter %}
+            Try changing the search or status filter.
+        {% else %}
+            Create your first product to start managing inventory.
+        {% endif %}
+    </p>
+    {% if not search_term and not status_filter %}
+        <a class="button" href="{{ url_for('add_product') }}">Add Your First Product</a>
+    {% endif %}
+</section>
+{% endif %}
+{% endblock %}

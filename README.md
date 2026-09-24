@@ -23,6 +23,8 @@ Inventory-AI/
 ├── templates/category_form.html
 ├── templates/suppliers.html
 ├── templates/supplier_form.html
+├── templates/products.html
+├── templates/product_form.html
 ├── static/css/style.css
 ├── static/js/script.js
 └── utils/helpers.py
@@ -65,8 +67,7 @@ Log in at `/login`. Successful authentication redirects to `/dashboard`.
 The dashboard is protected and redirects unauthenticated visitors to the
 login page. Use the Logout button to clear the session.
 
-No product, supplier, purchase, sales, reporting, or AI functionality is
-implemented yet.
+Purchase, sales, reporting, and AI functionality are not implemented yet.
 
 ## Category management
 
@@ -83,3 +84,11 @@ supplier contact details. Supplier lists can be filtered with the search box
 or with a URL such as `/suppliers?search=acme`. Searches check supplier name,
 contact person, email, and phone. A supplier that is referenced by a purchase
 cannot be deleted.
+
+## Product management
+
+After logging in, use the **Products** link to add and edit products, search
+by product name, SKU, category, or supplier, and filter by active status.
+Products can be activated or deactivated without deleting historical records.
+Current stock is manually editable at this stage; automatic stock transactions
+are not yet implemented.
