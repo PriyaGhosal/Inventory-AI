@@ -7,6 +7,8 @@ class Config:
     """Central configuration for Flask and the future MySQL connection."""
 
     SECRET_KEY = os.getenv("SECRET_KEY", "development-only-change-me")
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
 
     MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
     MYSQL_USER = os.getenv("MYSQL_USER", "root")

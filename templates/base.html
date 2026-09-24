@@ -11,11 +11,28 @@
         <a class="brand" href="{{ url_for('index') }}">Inventory-AI</a>
         <nav aria-label="Main navigation">
             <a href="{{ url_for('index') }}">Home</a>
-            <a href="{{ url_for('login') }}">Login</a>
+            {% if logged_in or session.get("user_id") %}
+                <a href="{{ url_for('dashboard') }}">Dashboard</a>
+                <form class="logout-form" method="post" action="{{ url_for('logout') }}">
+                    <button class="nav-button" type="submit">Logout</button>
+                </form>
+            {% else %}
+                <a href="{{ url_for('login') }}">Login</a>
+            {% endif %}
         </nav>
     </header>
 
     <main class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-list" aria-live="polite">
+                    {% for category, message in messages %}
+                        <div class="flash flash-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
         {% if home_page %}
         <section class="hero-card">
             <p class="eyebrow">Project foundation</p>

@@ -1,9 +1,9 @@
 # Inventory-AI
 
-Inventory-AI is a beginner-friendly Inventory Management System foundation
-built with Python 3.10, Flask, MySQL, HTML, CSS, vanilla JavaScript, and
-Jinja2. The project is being developed in small steps; this first step only
-creates the application shell and database schema.
+Inventory-AI is a beginner-friendly Inventory Management System built with
+Python 3.10, Flask, MySQL, HTML, CSS, vanilla JavaScript, and Jinja2. The
+project is being developed in small steps. Stage 2 adds real MySQL-backed user
+authentication and a protected dashboard placeholder.
 
 ## Project structure
 
@@ -16,6 +16,7 @@ Inventory-AI/
 ├── database/inventory.sql
 ├── templates/base.html
 ├── templates/login.html
+├── templates/dashboard.html
 ├── static/css/style.css
 ├── static/js/script.js
 └── utils/helpers.py
@@ -42,5 +43,21 @@ Inventory-AI/
 6. Open <http://127.0.0.1:5000/> in a browser. The initial login screen is
    available at <http://127.0.0.1:5000/login>.
 
-The application currently does not perform authentication or inventory
-operations. Those features will be added in later steps.
+## Create a local development admin
+
+After the database has been created and `.env` is configured, run:
+
+```powershell
+flask --app app create-admin
+```
+
+The command prompts for the full name, username, email, and password. The
+password is entered privately, hashed with Werkzeug, and never stored in plain
+text or included in the command line.
+
+Log in at `/login`. Successful authentication redirects to `/dashboard`.
+The dashboard is protected and redirects unauthenticated visitors to the
+login page. Use the Logout button to clear the session.
+
+No product, supplier, purchase, sales, reporting, or AI functionality is
+implemented yet.

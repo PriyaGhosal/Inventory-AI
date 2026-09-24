@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="dashboard-card">
+    <p class="eyebrow">Protected dashboard</p>
+    <h1>Welcome, {{ full_name }}.</h1>
+    <p class="lead">You are signed in and ready for the next project stage.</p>
+    <div class="account-summary">
+        <span class="summary-label">Role</span>
+        <strong>{{ role|title }}</strong>
+    </div>
+    <form method="post" action="{{ url_for('logout') }}">
+        <button class="button" type="submit">Logout</button>
+    </form>
+</section>
+{% endblock %}

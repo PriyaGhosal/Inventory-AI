@@ -53,6 +53,23 @@ nav a:hover {
     color: #b9d7ff;
 }
 
+.logout-form {
+    margin: 0;
+}
+
+.nav-button {
+    background: transparent;
+    border: 0;
+    color: #fff;
+    cursor: pointer;
+    font: inherit;
+    padding: 0;
+}
+
+.nav-button:hover {
+    color: #b9d7ff;
+}
+
 .container {
     flex: 1;
     margin: 0 auto;
@@ -62,7 +79,8 @@ nav a:hover {
 }
 
 .hero-card,
-.form-card {
+.form-card,
+.dashboard-card {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 14px;
@@ -77,6 +95,44 @@ nav a:hover {
 
 .form-card {
     max-width: 480px;
+}
+
+.dashboard-card {
+    max-width: 680px;
+}
+
+.flash-list {
+    margin-bottom: 1.5rem;
+}
+
+.flash {
+    border-radius: 7px;
+    padding: 0.85rem 1rem;
+}
+
+.flash-error {
+    background: #fff0f0;
+    border: 1px solid #f2b8b8;
+    color: #9b2525;
+}
+
+.flash-success {
+    background: #edf9f0;
+    border: 1px solid #b8dfc0;
+    color: #246b35;
+}
+
+.account-summary {
+    background: var(--pale-blue);
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    margin-top: 1.5rem;
+    padding: 1rem;
+}
+
+.summary-label {
+    color: var(--muted);
 }
 
 .eyebrow {
