@@ -2090,6 +2090,342 @@ def render_sale_form(form_data):
     )
 
 
+@app.get("/inventory")
+def inventory():
+    """Display current inventory, summary counts, and optional filters."""
+    if "user_id" not in session:
+        flash("Please log in to access inventory.", "error")
+        return redirect(url_for("login"))
+
+    search_term = request.args.get("search", "").strip()
+    status_filter = request.args.get("status", "").strip().lower()
+    allowed_statuses = {"out_of_stock", "low_stock", "in_stock", "active", "inactive"}
+    if status_filter not in allowed_statuses:
+        status_filter = ""
+
+    connection = None
+    cursor = None
+    product_rows = []
+    summary = {
+        "total_products": 0,
+        "in_stock": 0,
+        "low_stock": 0,
+        "out_of_stock": 0,
+    }
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT
+                COUNT(*) AS total_products,
+                COALESCE(SUM(CASE WHEN current_stock > reorder_level THEN 1 ELSE 0 END), 0) AS in_stock,
+                COALESCE(SUM(CASE WHEN current_stock > 0 AND current_stock <= reorder_level THEN 1 ELSE 0 END), 0) AS low_stock,
+                COALESCE(SUM(CASE WHEN current_stock <= 0 THEN 1 ELSE 0 END), 0) AS out_of_stock
+            FROM products
+            """
+        )
+        summary_row = cursor.fetchone()
+        if summary_row:
+            summary = {
+                "total_products": summary_row["total_products"],
+                "in_stock": summary_row["in_stock"],
+                "low_stock": summary_row["low_stock"],
+                "out_of_stock": summary_row["out_of_stock"],
+            }
+
+        conditions = []
+        parameters = []
+        if search_term:
+            pattern = f"%{search_term}%"
+            conditions.append(
+                "(p.product_name LIKE %s OR p.sku LIKE %s "
+                "OR c.category_name LIKE %s OR s.supplier_name LIKE %s)"
+            )
+            parameters.extend([pattern, pattern, pattern, pattern])
+        status_conditions = {
+            "out_of_stock": "p.current_stock <= 0",
+            "low_stock": "p.current_stock > 0 AND p.current_stock <= p.reorder_level",
+            "in_stock": "p.current_stock > p.reorder_level",
+            "active": "p.is_active = %s",
+            "inactive": "p.is_active = %s",
+        }
+        if status_filter:
+            conditions.append(status_conditions[status_filter])
+            if status_filter in {"active", "inactive"}:
+                parameters.append(status_filter == "active")
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        cursor.execute(
+            f"""
+            SELECT p.product_id, p.product_name, p.sku, p.current_stock,
+                   p.unit, p.reorder_level, p.is_active,
+                   c.category_name, s.supplier_name
+            FROM products AS p
+            INNER JOIN categories AS c ON p.category_id = c.category_id
+            LEFT JOIN suppliers AS s ON p.supplier_id = s.supplier_id
+            {where_clause}
+            ORDER BY p.product_name ASC
+            """,
+            tuple(parameters),
+        )
+        product_rows = cursor.fetchall()
+    except mysql.connector.Error:
+        app.logger.exception("Database error while loading inventory")
+        flash("Inventory is temporarily unavailable. Please try again.", "error")
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+    return render_template(
+        "inventory.html",
+        page_title="Inventory",
+        products=product_rows,
+        summary=summary,
+        search_term=search_term,
+        status_filter=status_filter,
+    )
+
+
+@app.route("/inventory/adjust/<int:product_id>", methods=["GET", "POST"])
+def adjust_inventory(product_id):
+    """Apply an atomic manual increase or decrease to active product stock."""
+    if "user_id" not in session:
+        flash("Please log in to adjust inventory.", "error")
+        return redirect(url_for("login"))
+
+    adjustment = {
+        "adjustment_type": "increase",
+        "quantity": "",
+        "notes": "",
+    }
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT product_id, product_name, sku, current_stock
+            FROM products
+            WHERE product_id = %s
+            """,
+            (product_id,),
+        )
+        product = cursor.fetchone()
+    except mysql.connector.Error:
+        app.logger.exception("Database error while loading adjustment product %s", product_id)
+        flash("The product could not be loaded. Please try again.", "error")
+        return redirect(url_for("inventory"))
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+    if product is None:
+        flash("Product not found.", "error")
+        return redirect(url_for("inventory"))
+
+    if request.method == "POST":
+        adjustment["adjustment_type"] = request.form.get("adjustment_type", "").strip()
+        adjustment["quantity"] = request.form.get("quantity", "").strip()
+        adjustment["notes"] = request.form.get("notes", "").strip()
+        validation_error = validate_adjustment_input(adjustment)
+        if validation_error:
+            flash(validation_error, "error")
+            return render_template(
+                "stock_adjustment.html",
+                page_title="Adjust Stock",
+                product=product,
+                adjustment=adjustment,
+            )
+
+        connection = None
+        cursor = None
+        try:
+            connection = get_db_connection()
+            connection.start_transaction()
+            cursor = connection.cursor(dictionary=True)
+            cursor.execute(
+                """
+                SELECT product_id, product_name, current_stock, is_active
+                FROM products
+                WHERE product_id = %s
+                FOR UPDATE
+                """,
+                (product_id,),
+            )
+            locked_product = cursor.fetchone()
+            if locked_product is None:
+                raise InventoryAdjustmentError("Product not found.")
+            if not locked_product["is_active"]:
+                raise InventoryAdjustmentError(
+                    "Only active products can be adjusted."
+                )
+
+            quantity = int(adjustment["quantity"])
+            current_stock = Decimal(str(locked_product["current_stock"]))
+            signed_quantity = (
+                quantity
+                if adjustment["adjustment_type"] == "increase"
+                else -quantity
+            )
+            new_stock = current_stock + Decimal(signed_quantity)
+            if new_stock < 0:
+                raise InventoryAdjustmentError(
+                    f"Insufficient stock. Current stock: {locked_product['current_stock']}."
+                )
+
+            cursor.execute(
+                "UPDATE products SET current_stock = %s WHERE product_id = %s",
+                (new_stock, product_id),
+            )
+            cursor.execute(
+                """
+                INSERT INTO stock_transactions
+                    (product_id, user_id, transaction_type, quantity,
+                     balance_after, notes)
+                VALUES (%s, %s, 'adjustment', %s, %s, %s)
+                """,
+                (
+                    product_id,
+                    session["user_id"],
+                    signed_quantity,
+                    new_stock,
+                    adjustment["notes"],
+                ),
+            )
+            connection.commit()
+        except InventoryAdjustmentError as error:
+            if connection is not None:
+                connection.rollback()
+            flash(str(error), "error")
+            return render_template(
+                "stock_adjustment.html",
+                page_title="Adjust Stock",
+                product=product,
+                adjustment=adjustment,
+            )
+        except mysql.connector.Error:
+            if connection is not None:
+                connection.rollback()
+            app.logger.exception("Database error while adjusting product %s", product_id)
+            flash("The stock adjustment could not be saved. Please try again.", "error")
+            return render_template(
+                "stock_adjustment.html",
+                page_title="Adjust Stock",
+                product=product,
+                adjustment=adjustment,
+            )
+        finally:
+            if cursor is not None:
+                cursor.close()
+            if connection is not None and connection.is_connected():
+                connection.close()
+
+        flash("Stock adjustment saved successfully.", "success")
+        return redirect(url_for("inventory"))
+
+    return render_template(
+        "stock_adjustment.html",
+        page_title="Adjust Stock",
+        product=product,
+        adjustment=adjustment,
+    )
+
+
+@app.get("/inventory/history")
+def inventory_history():
+    """Display newest stock transactions with safe optional filters."""
+    if "user_id" not in session:
+        flash("Please log in to access stock history.", "error")
+        return redirect(url_for("login"))
+
+    product_filter = request.args.get("product_id", "").strip()
+    transaction_filter = request.args.get("transaction_type", "").strip().lower()
+    allowed_types = {"purchase", "sale", "adjustment", "return"}
+    if transaction_filter not in allowed_types:
+        transaction_filter = ""
+
+    connection = None
+    cursor = None
+    transactions = []
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        conditions = []
+        parameters = []
+        if product_filter:
+            try:
+                product_id = int(product_filter)
+            except ValueError:
+                product_id = 0
+            conditions.append("st.product_id = %s")
+            parameters.append(product_id)
+        if transaction_filter:
+            conditions.append("st.transaction_type = %s")
+            parameters.append(transaction_filter)
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        cursor.execute(
+            f"""
+            SELECT st.transaction_id, st.transaction_date, st.transaction_type,
+                   st.quantity, st.balance_after, st.notes,
+                   p.product_id, p.product_name, p.sku,
+                   u.full_name, st.purchase_id, st.sale_id
+            FROM stock_transactions AS st
+            INNER JOIN products AS p ON st.product_id = p.product_id
+            INNER JOIN users AS u ON st.user_id = u.user_id
+            LEFT JOIN purchases AS pu ON st.purchase_id = pu.purchase_id
+            LEFT JOIN sales AS sa ON st.sale_id = sa.sale_id
+            {where_clause}
+            ORDER BY st.transaction_date DESC, st.transaction_id DESC
+            """,
+            tuple(parameters),
+        )
+        transactions = cursor.fetchall()
+    except mysql.connector.Error:
+        app.logger.exception("Database error while loading stock history")
+        flash("Stock history is temporarily unavailable. Please try again.", "error")
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+    return render_template(
+        "stock_history.html",
+        page_title="Stock History",
+        transactions=transactions,
+        product_filter=product_filter,
+        transaction_filter=transaction_filter,
+    )
+
+
+class InventoryAdjustmentError(Exception):
+    """Expected validation failure during an inventory adjustment."""
+
+
+def validate_adjustment_input(adjustment):
+    """Validate adjustment type, positive quantity, and reason."""
+    if adjustment["adjustment_type"] not in {"increase", "decrease"}:
+        return "Please select a valid adjustment type."
+    if not adjustment["quantity"]:
+        return "Quantity is required."
+    try:
+        quantity = int(adjustment["quantity"])
+    except (TypeError, ValueError):
+        return "Quantity must be a positive integer."
+    if quantity <= 0 or str(quantity) != adjustment["quantity"]:
+        return "Quantity must be a positive integer."
+    if not adjustment["notes"]:
+        return "Reason is required."
+    if len(adjustment["notes"]) > 255:
+        return "Reason must be 255 characters or fewer."
+    return None
+
+
 @app.post("/logout")
 def logout():
     """End the current session and return the user to the login page."""

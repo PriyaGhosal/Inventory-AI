@@ -31,6 +31,9 @@ Inventory-AI/
 ├── templates/sales.html
 ├── templates/sale_form.html
 ├── templates/sale_detail.html
+├── templates/inventory.html
+├── templates/stock_adjustment.html
+├── templates/stock_history.html
 ├── static/css/style.css
 ├── static/js/script.js
 └── utils/helpers.py
@@ -115,3 +118,12 @@ reduces stock atomically, and creates matching `stock_transactions` rows.
 Sales can be searched by sale ID, customer name, or phone, and filtered by
 payment method. Cancelling a completed sale restores stock in one transaction
 and records return transactions. A cancelled sale cannot be cancelled again.
+
+## Inventory and stock history
+
+The protected **Inventory** page summarizes current stock, supports product
+search and stock/active-status filters, and provides controlled manual
+adjustments. Increases record positive adjustment quantities; decreases record
+negative adjustment quantities. Every adjustment locks the product row and
+updates `products.current_stock` and `stock_transactions` in one transaction.
+Purchases and sales continue to own their existing stock-update logic.

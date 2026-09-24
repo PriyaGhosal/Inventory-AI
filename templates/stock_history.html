@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-heading">
+    <div><p class="eyebrow">Inventory audit</p><h1>Stock History</h1><p class="muted">Every purchase, sale, return, and adjustment is recorded here.</p></div>
+    <a class="button button-secondary" href="{{ url_for('inventory') }}">Back to Inventory</a>
+</section>
+
+<form class="search-form" method="get" action="{{ url_for('inventory_history') }}">
+    <label for="history-product">Product ID</label>
+    <div class="search-controls">
+        <input id="history-product" name="product_id" type="number" min="1" value="{{ product_filter }}" placeholder="Product ID">
+        <select name="transaction_type" aria-label="Filter transaction type">
+            <option value="">All transaction types</option>
+            {% for transaction_type in ("purchase", "sale", "adjustment", "return") %}
+                <option value="{{ transaction_type }}" {% if transaction_filter == transaction_type %}selected{% endif %}>{{ transaction_type|title }}</option>
+            {% endfor %}
+        </select>
+        <button class="button" type="submit">Filter</button>
+        {% if product_filter or transaction_filter %}<a class="button button-secondary" href="{{ url_for('inventory_history') }}">Clear</a>{% endif %}
+    </div>
+</form>
+
+{% if transactions %}
+<div class="table-card">
+    <div class="table-wrapper">
+        <table class="history-table">
+            <thead><tr><th>Transaction ID</th><th>Date</th><th>Product</th><th>SKU</th><th>Type</th><th>Quantity</th><th>Balance After</th><th>User</th><th>Purchase</th><th>Sale</th><th>Notes</th></tr></thead>
+            <tbody>
+                {% for transaction in transactions %}
+                <tr>
+                    <td>{{ transaction.transaction_id }}</td>
+                    <td>{{ transaction.transaction_date.strftime("%d %b %Y %H:%M") if transaction.transaction_date else "—" }}</td>
+                    <td>{{ transaction.product_name }}</td>
+                    <td>{{ transaction.sku }}</td>
+                    <td><span class="status-badge transaction-{{ transaction.transaction_type }}">{{ transaction.transaction_type|title }}</span></td>
+                    <td>{{ "%+.2f"|format(transaction.quantity) }}</td>
+                    <td>{{ "%.2f"|format(transaction.balance_after) }}</td>
+                    <td>{{ transaction.full_name }}</td>
+                    <td>{% if transaction.purchase_id %}<a href="{{ url_for('purchase_detail', purchase_id=transaction.purchase_id) }}">#{{ transaction.purchase_id }}</a>{% else %}—{% endif %}</td>
+                    <td>{% if transaction.sale_id %}<a href="{{ url_for('sale_detail', sale_id=transaction.sale_id) }}">#{{ transaction.sale_id }}</a>{% else %}—{% endif %}</td>
+                    <td>{{ transaction.notes or "—" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<section class="empty-state"><h2>No stock transactions yet</h2><p class="muted">Stock movements will appear here after purchases, sales, or adjustments.</p></section>
+{% endif %}
+{% endblock %}

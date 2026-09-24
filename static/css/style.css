@@ -131,6 +131,104 @@ nav a:hover {
     max-width: 900px;
 }
 
+.adjustment-card {
+    max-width: 620px;
+}
+
+.summary-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(4, 1fr);
+    margin-bottom: 1.5rem;
+}
+
+.summary-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 8px 20px rgb(23 50 77 / 6%);
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 1.25rem;
+}
+
+.summary-card span {
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+
+.summary-card strong {
+    color: var(--navy);
+    font-size: 1.7rem;
+}
+
+.summary-in-stock strong {
+    color: #246b35;
+}
+
+.summary-low-stock strong {
+    color: #795b00;
+}
+
+.summary-out-stock strong {
+    color: #9b2525;
+}
+
+.inventory-table,
+.history-table {
+    min-width: 1200px;
+}
+
+.stock-status-in_stock {
+    background: #edf9f0;
+    color: #246b35;
+}
+
+.stock-status-low_stock {
+    background: #fff8e6;
+    color: #795b00;
+}
+
+.stock-status-out_of_stock {
+    background: #fff0f0;
+    color: #9b2525;
+}
+
+.product-summary {
+    background: var(--pale-blue);
+    border-radius: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin: 1.5rem 0;
+    padding: 1rem;
+}
+
+.product-summary span {
+    color: var(--muted);
+}
+
+.transaction-purchase {
+    background: #edf9f0;
+    color: #246b35;
+}
+
+.transaction-sale {
+    background: #fff0f0;
+    color: #9b2525;
+}
+
+.transaction-adjustment {
+    background: var(--pale-blue);
+    color: var(--navy);
+}
+
+.transaction-return {
+    background: #fff8e6;
+    color: #795b00;
+}
+
 .detail-card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -592,6 +690,10 @@ textarea:focus {
         grid-template-columns: 1fr;
     }
 
+    .summary-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
     .detail-grid {
         grid-template-columns: repeat(2, 1fr);
     }
@@ -610,5 +712,11 @@ textarea:focus {
 
     .sale-item-row > div:first-child {
         grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 420px) {
+    .summary-grid {
+        grid-template-columns: 1fr;
     }
 }

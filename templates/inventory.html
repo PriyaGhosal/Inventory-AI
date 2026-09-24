@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-heading">
+    <div>
+        <p class="eyebrow">Inventory overview</p>
+        <h1>Inventory</h1>
+        <p class="muted">Monitor stock levels and record controlled adjustments.</p>
+    </div>
+    <a class="button button-secondary" href="{{ url_for('inventory_history') }}">Stock History</a>
+</section>
+
+<div class="summary-grid">
+    <div class="summary-card"><span>Total Products</span><strong>{{ summary.total_products }}</strong></div>
+    <div class="summary-card summary-in-stock"><span>In Stock</span><strong>{{ summary.in_stock }}</strong></div>
+    <div class="summary-card summary-low-stock"><span>Low Stock</span><strong>{{ summary.low_stock }}</strong></div>
+    <div class="summary-card summary-out-stock"><span>Out of Stock</span><strong>{{ summary.out_of_stock }}</strong></div>
+</div>
+
+<form class="search-form" method="get" action="{{ url_for('inventory') }}">
+    <label for="inventory-search">Search inventory</label>
+    <div class="search-controls">
+        <input id="inventory-search" name="search" type="search" value="{{ search_term }}" placeholder="Product, SKU, category, or supplier">
+        <select name="status" aria-label="Filter inventory">
+            <option value="">All statuses</option>
+            <option value="out_of_stock" {% if status_filter == "out_of_stock" %}selected{% endif %}>Out of Stock</option>
+            <option value="low_stock" {% if status_filter == "low_stock" %}selected{% endif %}>Low Stock</option>
+            <option value="in_stock" {% if status_filter == "in_stock" %}selected{% endif %}>In Stock</option>
+            <option value="active" {% if status_filter == "active" %}selected{% endif %}>Active</option>
+            <option value="inactive" {% if status_filter == "inactive" %}selected{% endif %}>Inactive</option>
+        </select>
+        <button class="button" type="submit">Filter</button>
+        {% if search_term or status_filter %}<a class="button button-secondary" href="{{ url_for('inventory') }}">Clear</a>{% endif %}
+    </div>
+</form>
+
+{% if products %}
+<div class="table-card">
+    <div class="table-wrapper">
+        <table class="inventory-table">
+            <thead><tr><th>ID</th><th>Product</th><th>SKU</th><th>Category</th><th>Supplier</th><th>Current Stock</th><th>Unit</th><th>Reorder Level</th><th>Stock Status</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+                {% for product in products %}
+                {% if product.current_stock <= 0 %}
+                    {% set stock_status = "out_of_stock" %}
+                    {% set stock_label = "Out of Stock" %}
+                {% elif product.current_stock <= product.reorder_level %}
+                    {% set stock_status = "low_stock" %}
+                    {% set stock_label = "Low Stock" %}
+                {% else %}
+                    {% set stock_status = "in_stock" %}
+                    {% set stock_label = "In Stock" %}
+                {% endif %}
+                <tr>
+                    <td>{{ product.product_id }}</td>
+                    <td>{{ product.product_name }}</td>
+                    <td>{{ product.sku }}</td>
+                    <td>{{ product.category_name }}</td>
+                    <td>{{ product.supplier_name or "—" }}</td>
+                    <td>{{ product.current_stock }}</td>
+                    <td>{{ product.unit or "—" }}</td>
+                    <td>{{ product.reorder_level }}</td>
+                    <td><span class="status-badge stock-status-{{ stock_status }}">{{ stock_label }}</span></td>
+                    <td><span class="status-badge {% if product.is_active %}status-active{% else %}status-inactive{% endif %}">{{ "Active" if product.is_active else "Inactive" }}</span></td>
+                    <td><a class="button button-small" href="{{ url_for('adjust_inventory', product_id=product.product_id) }}">Adjust</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<section class="empty-state">
+    <h2>{% if search_term or status_filter %}No matching inventory{% else %}No inventory yet{% endif %}</h2>
+    <p class="muted">Try changing the search or stock filter.</p>
+</section>
+{% endif %}
+{% endblock %}
