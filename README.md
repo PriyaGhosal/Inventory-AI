@@ -25,6 +25,9 @@ Inventory-AI/
 ├── templates/supplier_form.html
 ├── templates/products.html
 ├── templates/product_form.html
+├── templates/purchases.html
+├── templates/purchase_form.html
+├── templates/purchase_detail.html
 ├── static/css/style.css
 ├── static/js/script.js
 └── utils/helpers.py
@@ -92,3 +95,12 @@ by product name, SKU, category, or supplier, and filter by active status.
 Products can be activated or deactivated without deleting historical records.
 Current stock is manually editable at this stage; automatic stock transactions
 are not yet implemented.
+
+## Purchase management
+
+The protected **Purchases** module creates pending purchases with multiple
+items. Totals are recalculated on the server. Creating a pending purchase does
+not change stock. Receiving a purchase uses one database transaction to update
+all product stock values, create matching `stock_transactions` records, and
+mark the purchase as received. Cancelling a pending purchase does not change
+stock.

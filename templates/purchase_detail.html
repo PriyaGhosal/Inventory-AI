@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-heading">
+    <div>
+        <p class="eyebrow">Inventory operations</p>
+        <h1>Purchase #{{ purchase.purchase_id }}</h1>
+        <p class="muted">Invoice {{ purchase.invoice_number }}</p>
+    </div>
+    <a class="button button-secondary" href="{{ url_for('purchases') }}">Back to Purchases</a>
+</section>
+
+<section class="detail-card">
+    <div class="detail-grid">
+        <div><span class="summary-label">Supplier</span><strong>{{ purchase.supplier_name }}</strong></div>
+        <div><span class="summary-label">Purchase Date</span><strong>{{ purchase.purchase_date.strftime("%d %b %Y") }}</strong></div>
+        <div><span class="summary-label">Status</span><strong><span class="status-badge status-{{ purchase.status }}">{{ purchase.status|title }}</span></strong></div>
+        <div><span class="summary-label">Created By</span><strong>{{ purchase.full_name }}</strong></div>
+    </div>
+    {% if purchase.notes %}
+        <p class="detail-notes"><strong>Notes:</strong> {{ purchase.notes }}</p>
+    {% endif %}
+</section>
+
+<div class="table-card detail-items-card">
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>Product</th>
+                    <th>SKU</th>
+                    <th>Quantity</th>
+                    <th>Unit Cost</th>
+                    <th>Line Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td>{{ item.product_name }}</td>
+                    <td>{{ item.sku }}</td>
+                    <td>{{ item.quantity }}</td>
+                    <td>₹{{ "%.2f"|format(item.unit_cost) }}</td>
+                    <td>₹{{ "%.2f"|format(item.line_total) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="purchase-total detail-total">
+        <span>Total Amount</span>
+        <strong>₹{{ "%.2f"|format(purchase.total_amount) }}</strong>
+    </div>
+</div>
+
+{% if purchase.status == "pending" %}
+<div class="form-actions detail-actions">
+    <form method="post" action="{{ url_for('receive_purchase', purchase_id=purchase.purchase_id) }}">
+        <button class="button button-success" type="submit">Receive Purchase</button>
+    </form>
+    <form method="post" action="{{ url_for('cancel_purchase', purchase_id=purchase.purchase_id) }}">
+        <button class="button button-danger" type="submit">Cancel Purchase</button>
+    </form>
+</div>
+{% endif %}
+{% endblock %}

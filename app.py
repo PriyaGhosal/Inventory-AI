@@ -3,6 +3,7 @@
 import click
 import mysql.connector
 import re
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from dotenv import load_dotenv
 from flask import Flask, flash, redirect, render_template, session, url_for
@@ -1093,6 +1094,529 @@ def render_product_form(product, form_title, submit_label):
         product=product,
         categories=categories,
         suppliers=suppliers,
+    )
+
+
+@app.get("/purchases")
+def purchases():
+    """Display purchases with optional invoice or supplier search."""
+    if "user_id" not in session:
+        flash("Please log in to access purchases.", "error")
+        return redirect(url_for("login"))
+
+    search_term = request.args.get("search", "").strip()
+    connection = None
+    cursor = None
+    purchase_rows = []
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        if search_term:
+            pattern = f"%{search_term}%"
+            cursor.execute(
+                """
+                SELECT p.purchase_id, p.invoice_number, p.purchase_date,
+                       p.total_amount, p.status, p.created_at,
+                       s.supplier_name, u.full_name
+                FROM purchases AS p
+                INNER JOIN suppliers AS s ON p.supplier_id = s.supplier_id
+                INNER JOIN users AS u ON p.user_id = u.user_id
+                WHERE p.invoice_number LIKE %s OR s.supplier_name LIKE %s
+                ORDER BY p.purchase_date DESC, p.purchase_id DESC
+                """,
+                (pattern, pattern),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT p.purchase_id, p.invoice_number, p.purchase_date,
+                       p.total_amount, p.status, p.created_at,
+                       s.supplier_name, u.full_name
+                FROM purchases AS p
+                INNER JOIN suppliers AS s ON p.supplier_id = s.supplier_id
+                INNER JOIN users AS u ON p.user_id = u.user_id
+                ORDER BY p.purchase_date DESC, p.purchase_id DESC
+                """
+            )
+        purchase_rows = cursor.fetchall()
+    except mysql.connector.Error:
+        app.logger.exception("Database error while loading purchases")
+        flash("Purchases are temporarily unavailable. Please try again.", "error")
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+    return render_template(
+        "purchases.html",
+        page_title="Purchase Management",
+        purchases=purchase_rows,
+        search_term=search_term,
+    )
+
+
+@app.route("/purchases/add", methods=["GET", "POST"])
+def add_purchase():
+    """Display and atomically create a pending purchase with its items."""
+    if "user_id" not in session:
+        flash("Please log in to manage purchases.", "error")
+        return redirect(url_for("login"))
+
+    form_data = empty_purchase_form()
+    if request.method == "POST":
+        form_data = purchase_form_from_request()
+        validation_error, purchase_items, total_amount = validate_purchase_form(form_data)
+        if validation_error:
+            flash(validation_error, "error")
+            return render_purchase_form(form_data)
+
+        connection = None
+        cursor = None
+        try:
+            connection = get_db_connection()
+            connection.start_transaction()
+            cursor = connection.cursor(dictionary=True)
+
+            cursor.execute(
+                "SELECT supplier_id FROM suppliers WHERE supplier_id = %s",
+                (form_data["supplier_id"],),
+            )
+            if cursor.fetchone() is None:
+                connection.rollback()
+                flash("Please select an existing supplier.", "error")
+                return render_purchase_form(form_data)
+
+            verified_items = []
+            for item in purchase_items:
+                cursor.execute(
+                    """
+                    SELECT product_id, product_name, sku
+                    FROM products
+                    WHERE product_id = %s AND is_active = TRUE
+                    """,
+                    (item["product_id"],),
+                )
+                product = cursor.fetchone()
+                if product is None:
+                    connection.rollback()
+                    flash(
+                        "Every selected product must exist and be active.",
+                        "error",
+                    )
+                    return render_purchase_form(form_data)
+                verified_items.append((item, product))
+
+            cursor.execute(
+                """
+                INSERT INTO purchases
+                    (supplier_id, user_id, purchase_date, invoice_number,
+                     total_amount, status, notes)
+                VALUES (%s, %s, %s, %s, %s, 'pending', %s)
+                """,
+                (
+                    int(form_data["supplier_id"]),
+                    session["user_id"],
+                    form_data["purchase_date"],
+                    form_data["invoice_number"],
+                    total_amount,
+                    form_data["notes"] or None,
+                ),
+            )
+            purchase_id = cursor.lastrowid
+            for item, _product in verified_items:
+                cursor.execute(
+                    """
+                    INSERT INTO purchase_items
+                        (purchase_id, product_id, quantity, unit_cost, line_total)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (
+                        purchase_id,
+                        item["product_id"],
+                        item["quantity"],
+                        item["unit_cost"],
+                        item["line_total"],
+                    ),
+                )
+            connection.commit()
+        except mysql.connector.IntegrityError:
+            if connection is not None:
+                connection.rollback()
+            flash("A purchase with this invoice number already exists.", "error")
+            return render_purchase_form(form_data)
+        except mysql.connector.Error:
+            if connection is not None:
+                connection.rollback()
+            app.logger.exception("Database error while creating purchase")
+            flash("The purchase could not be created. Please try again.", "error")
+            return render_purchase_form(form_data)
+        finally:
+            if cursor is not None:
+                cursor.close()
+            if connection is not None and connection.is_connected():
+                connection.close()
+
+        flash("Purchase created as pending.", "success")
+        return redirect(url_for("purchase_detail", purchase_id=purchase_id))
+
+    return render_purchase_form(form_data)
+
+
+@app.get("/purchases/<int:purchase_id>")
+def purchase_detail(purchase_id):
+    """Display one purchase and its line items."""
+    if "user_id" not in session:
+        flash("Please log in to access purchases.", "error")
+        return redirect(url_for("login"))
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT p.purchase_id, p.invoice_number, p.purchase_date,
+                   p.total_amount, p.status, p.notes, p.created_at,
+                   s.supplier_name, u.full_name
+            FROM purchases AS p
+            INNER JOIN suppliers AS s ON p.supplier_id = s.supplier_id
+            INNER JOIN users AS u ON p.user_id = u.user_id
+            WHERE p.purchase_id = %s
+            """,
+            (purchase_id,),
+        )
+        purchase = cursor.fetchone()
+        if purchase is None:
+            flash("Purchase not found.", "error")
+            return redirect(url_for("purchases"))
+        cursor.execute(
+            """
+            SELECT pi.product_id, pi.quantity, pi.unit_cost, pi.line_total,
+                   pr.product_name, pr.sku
+            FROM purchase_items AS pi
+            INNER JOIN products AS pr ON pi.product_id = pr.product_id
+            WHERE pi.purchase_id = %s
+            ORDER BY pi.purchase_item_id
+            """,
+            (purchase_id,),
+        )
+        items = cursor.fetchall()
+    except mysql.connector.Error:
+        app.logger.exception("Database error while loading purchase %s", purchase_id)
+        flash("The purchase could not be loaded. Please try again.", "error")
+        return redirect(url_for("purchases"))
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+    return render_template(
+        "purchase_detail.html",
+        page_title="Purchase Details",
+        purchase=purchase,
+        items=items,
+    )
+
+
+@app.post("/purchases/<int:purchase_id>/receive")
+def receive_purchase(purchase_id):
+    """Receive a pending purchase in one atomic stock transaction."""
+    if "user_id" not in session:
+        flash("Please log in to manage purchases.", "error")
+        return redirect(url_for("login"))
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        connection.start_transaction()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT purchase_id, status
+            FROM purchases
+            WHERE purchase_id = %s
+            FOR UPDATE
+            """,
+            (purchase_id,),
+        )
+        purchase = cursor.fetchone()
+        if purchase is None:
+            connection.rollback()
+            flash("Purchase not found.", "error")
+            return redirect(url_for("purchases"))
+        if purchase["status"] == "received":
+            connection.rollback()
+            flash("Purchase has already been received.", "error")
+            return redirect(url_for("purchase_detail", purchase_id=purchase_id))
+        if purchase["status"] == "cancelled":
+            connection.rollback()
+            flash("Cancelled purchases cannot be received.", "error")
+            return redirect(url_for("purchase_detail", purchase_id=purchase_id))
+
+        cursor.execute(
+            """
+            SELECT product_id, quantity
+            FROM purchase_items
+            WHERE purchase_id = %s
+            ORDER BY purchase_item_id
+            """,
+            (purchase_id,),
+        )
+        items = cursor.fetchall()
+        if not items:
+            connection.rollback()
+            flash("This purchase has no items and cannot be received.", "error")
+            return redirect(url_for("purchase_detail", purchase_id=purchase_id))
+
+        for item in items:
+            cursor.execute(
+                """
+                SELECT current_stock
+                FROM products
+                WHERE product_id = %s
+                FOR UPDATE
+                """,
+                (item["product_id"],),
+            )
+            product = cursor.fetchone()
+            if product is None:
+                raise mysql.connector.Error("Purchase item product no longer exists")
+            new_stock = Decimal(str(product["current_stock"])) + Decimal(
+                str(item["quantity"])
+            )
+            cursor.execute(
+                """
+                UPDATE products
+                SET current_stock = %s
+                WHERE product_id = %s
+                """,
+                (new_stock, item["product_id"]),
+            )
+            cursor.execute(
+                """
+                INSERT INTO stock_transactions
+                    (product_id, user_id, purchase_id, transaction_type,
+                     quantity, balance_after, notes)
+                VALUES (%s, %s, %s, 'purchase', %s, %s, %s)
+                """,
+                (
+                    item["product_id"],
+                    session["user_id"],
+                    purchase_id,
+                    item["quantity"],
+                    new_stock,
+                    f"Stock received for purchase #{purchase_id}",
+                ),
+            )
+
+        cursor.execute(
+            """
+            UPDATE purchases
+            SET status = 'received'
+            WHERE purchase_id = %s
+            """,
+            (purchase_id,),
+        )
+        connection.commit()
+    except mysql.connector.Error:
+        if connection is not None:
+            connection.rollback()
+        app.logger.exception("Database error while receiving purchase %s", purchase_id)
+        flash("The purchase could not be received. No stock was changed.", "error")
+        return redirect(url_for("purchase_detail", purchase_id=purchase_id))
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+    flash("Purchase received and stock updated.", "success")
+    return redirect(url_for("purchase_detail", purchase_id=purchase_id))
+
+
+@app.post("/purchases/<int:purchase_id>/cancel")
+def cancel_purchase(purchase_id):
+    """Cancel a pending purchase without changing stock."""
+    if "user_id" not in session:
+        flash("Please log in to manage purchases.", "error")
+        return redirect(url_for("login"))
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        connection.start_transaction()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT status
+            FROM purchases
+            WHERE purchase_id = %s
+            FOR UPDATE
+            """,
+            (purchase_id,),
+        )
+        purchase = cursor.fetchone()
+        if purchase is None:
+            flash("Purchase not found.", "error")
+        elif purchase["status"] == "received":
+            flash("Received purchases cannot be cancelled.", "error")
+        elif purchase["status"] == "cancelled":
+            flash("This purchase is already cancelled.", "error")
+        else:
+            cursor.execute(
+                "UPDATE purchases SET status = 'cancelled' WHERE purchase_id = %s",
+                (purchase_id,),
+            )
+            connection.commit()
+            flash("Purchase cancelled.", "success")
+            return redirect(url_for("purchase_detail", purchase_id=purchase_id))
+    except mysql.connector.Error:
+        if connection is not None:
+            connection.rollback()
+        app.logger.exception("Database error while cancelling purchase %s", purchase_id)
+        flash("The purchase could not be cancelled. Please try again.", "error")
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+    return redirect(url_for("purchase_detail", purchase_id=purchase_id))
+
+
+def empty_purchase_form():
+    """Return the default values used by the purchase form."""
+    return {
+        "supplier_id": "",
+        "invoice_number": "",
+        "purchase_date": datetime.now().strftime("%Y-%m-%d"),
+        "notes": "",
+        "items": [{"product_id": "", "quantity": "", "unit_cost": ""}],
+    }
+
+
+def purchase_form_from_request():
+    """Read header and repeated item fields from the purchase form."""
+    product_ids = request.form.getlist("product_id[]")
+    quantities = request.form.getlist("quantity[]")
+    unit_costs = request.form.getlist("unit_cost[]")
+    item_count = max(len(product_ids), len(quantities), len(unit_costs))
+    items = []
+    for index in range(item_count):
+        items.append(
+            {
+                "product_id": product_ids[index] if index < len(product_ids) else "",
+                "quantity": quantities[index] if index < len(quantities) else "",
+                "unit_cost": unit_costs[index] if index < len(unit_costs) else "",
+            }
+        )
+    return {
+        "supplier_id": request.form.get("supplier_id", "").strip(),
+        "invoice_number": request.form.get("invoice_number", "").strip(),
+        "purchase_date": request.form.get("purchase_date", "").strip(),
+        "notes": request.form.get("notes", "").strip(),
+        "items": items or [{"product_id": "", "quantity": "", "unit_cost": ""}],
+    }
+
+
+def validate_purchase_form(form_data):
+    """Validate purchase fields and calculate trusted item totals server-side."""
+    if not form_data["supplier_id"]:
+        return "Supplier is required.", [], Decimal("0.00")
+    if not form_data["invoice_number"]:
+        return "Invoice number is required.", [], Decimal("0.00")
+    if len(form_data["invoice_number"]) > 80:
+        return "Invoice number must be 80 characters or fewer.", [], Decimal("0.00")
+    try:
+        form_data["purchase_date"] = datetime.strptime(
+            form_data["purchase_date"], "%Y-%m-%d"
+        ).date()
+    except (TypeError, ValueError):
+        return "Please enter a valid purchase date.", [], Decimal("0.00")
+    if not form_data["items"]:
+        return "At least one purchase item is required.", [], Decimal("0.00")
+
+    validated_items = []
+    total_amount = Decimal("0.00")
+    for item in form_data["items"]:
+        if not item["product_id"]:
+            return "Every purchase item must have a product.", [], Decimal("0.00")
+        try:
+            product_id = int(item["product_id"])
+            quantity = int(item["quantity"])
+        except (TypeError, ValueError):
+            return "Product IDs and quantities must be valid integers.", [], Decimal("0.00")
+        if product_id <= 0 or quantity <= 0 or str(quantity) != item["quantity"]:
+            return "Quantity must be a positive integer.", [], Decimal("0.00")
+        try:
+            unit_cost = Decimal(item["unit_cost"])
+        except (InvalidOperation, TypeError):
+            return "Unit cost must be a valid number.", [], Decimal("0.00")
+        if not unit_cost.is_finite() or unit_cost < 0 or unit_cost.as_tuple().exponent < -2:
+            return (
+                "Unit cost must be non-negative with at most 2 decimal places.",
+                [],
+                Decimal("0.00"),
+            )
+        line_total = (Decimal(quantity) * unit_cost).quantize(Decimal("0.01"))
+        total_amount += line_total
+        validated_items.append(
+            {
+                "product_id": product_id,
+                "quantity": quantity,
+                "unit_cost": unit_cost,
+                "line_total": line_total,
+            }
+        )
+    form_data["items"] = validated_items
+    return None, validated_items, total_amount.quantize(Decimal("0.01"))
+
+
+def load_purchase_options():
+    """Load suppliers and active products for the purchase form."""
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT supplier_id, supplier_name FROM suppliers ORDER BY supplier_name"
+        )
+        suppliers = cursor.fetchall()
+        cursor.execute(
+            """
+            SELECT product_id, product_name, sku, current_stock
+            FROM products
+            WHERE is_active = TRUE
+            ORDER BY product_name
+            """
+        )
+        products = cursor.fetchall()
+        return suppliers, products
+    except mysql.connector.Error:
+        app.logger.exception("Database error while loading purchase form options")
+        return [], []
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+
+def render_purchase_form(form_data):
+    """Render the purchase form with supplier and active-product options."""
+    suppliers, products = load_purchase_options()
+    return render_template(
+        "purchase_form.html",
+        page_title="New Purchase",
+        suppliers=suppliers,
+        products=products,
+        purchase=form_data,
     )
 
 

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-heading">
+    <div>
+        <p class="eyebrow">Inventory operations</p>
+        <h1>Purchase Management</h1>
+        <p class="muted">Create purchases and receive stock when goods arrive.</p>
+    </div>
+    <a class="button" href="{{ url_for('add_purchase') }}">New Purchase</a>
+</section>
+
+<form class="search-form" method="get" action="{{ url_for('purchases') }}">
+    <label for="purchase-search">Search purchases</label>
+    <div class="search-controls">
+        <input id="purchase-search" name="search" type="search" value="{{ search_term }}" placeholder="Invoice number or supplier">
+        <button class="button" type="submit">Search</button>
+        {% if search_term %}
+            <a class="button button-secondary" href="{{ url_for('purchases') }}">Clear</a>
+        {% endif %}
+    </div>
+</form>
+
+{% if purchases %}
+<div class="table-card">
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Invoice Number</th>
+                    <th>Supplier</th>
+                    <th>Purchase Date</th>
+                    <th>Total Amount</th>
+                    <th>Status</th>
+                    <th>Created By</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for purchase in purchases %}
+                <tr>
+                    <td>{{ purchase.purchase_id }}</td>
+                    <td>{{ purchase.invoice_number }}</td>
+                    <td>{{ purchase.supplier_name }}</td>
+                    <td>{{ purchase.purchase_date.strftime("%d %b %Y") if purchase.purchase_date else "—" }}</td>
+                    <td>₹{{ "%.2f"|format(purchase.total_amount) }}</td>
+                    <td><span class="status-badge status-{{ purchase.status }}">{{ purchase.status|title }}</span></td>
+                    <td>{{ purchase.full_name }}</td>
+                    <td class="actions">
+                        <a class="button button-small" href="{{ url_for('purchase_detail', purchase_id=purchase.purchase_id) }}">View Details</a>
+                        {% if purchase.status == "pending" %}
+                            <form method="post" action="{{ url_for('receive_purchase', purchase_id=purchase.purchase_id) }}">
+                                <button class="button button-small button-success" type="submit">Receive</button>
+                            </form>
+                            <form method="post" action="{{ url_for('cancel_purchase', purchase_id=purchase.purchase_id) }}">
+                                <button class="button button-small button-danger" type="submit">Cancel</button>
+                            </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<section class="empty-state">
+    <h2>{% if search_term %}No matching purchases{% else %}No purchases yet{% endif %}</h2>
+    <p class="muted">{% if search_term %}Try a different search term.{% else %}Create your first purchase to begin tracking incoming stock.{% endif %}</p>
+    {% if not search_term %}
+        <a class="button" href="{{ url_for('add_purchase') }}">Create Your First Purchase</a>
+    {% endif %}
+</section>
+{% endif %}
+{% endblock %}

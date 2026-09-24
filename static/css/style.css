@@ -127,6 +127,119 @@ nav a:hover {
     max-width: 720px;
 }
 
+.purchase-form-card {
+    max-width: 900px;
+}
+
+.detail-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 12px 30px rgb(23 50 77 / 8%);
+    margin-bottom: 1.5rem;
+    padding: 1.5rem;
+}
+
+.detail-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(4, 1fr);
+}
+
+.detail-grid div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.detail-notes {
+    border-top: 1px solid var(--border);
+    margin: 1.5rem 0 0;
+    padding-top: 1rem;
+}
+
+.items-heading {
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    margin-top: 2rem;
+}
+
+.items-heading h2 {
+    color: var(--navy);
+    font-size: 1.15rem;
+    margin: 0.5rem 0;
+}
+
+.purchase-item-row {
+    align-items: end;
+    border-bottom: 1px solid var(--border);
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: minmax(220px, 2fr) minmax(100px, 1fr) minmax(120px, 1fr) minmax(100px, 1fr) auto;
+    padding: 1rem 0;
+}
+
+.purchase-item-row label {
+    display: block;
+}
+
+.purchase-item-row select,
+.purchase-item-row input {
+    width: 100%;
+}
+
+.item-line-total {
+    display: block;
+    font-weight: 600;
+    padding: 0.75rem 0;
+}
+
+.purchase-total {
+    align-items: center;
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    padding: 1rem 0;
+}
+
+.purchase-total strong {
+    color: var(--navy);
+    font-size: 1.2rem;
+}
+
+.detail-items-card {
+    padding: 0;
+}
+
+.detail-total {
+    padding: 1rem 1.5rem;
+}
+
+.detail-actions {
+    justify-content: flex-end;
+}
+
+.detail-actions form {
+    margin: 0;
+}
+
+.status-pending {
+    background: #fff8e6;
+    color: #795b00;
+}
+
+.status-received {
+    background: #edf9f0;
+    color: #246b35;
+}
+
+.status-cancelled {
+    background: #fff0f0;
+    color: #9b2525;
+}
+
 .search-form {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -438,5 +551,17 @@ textarea:focus {
 
     .form-grid {
         grid-template-columns: 1fr;
+    }
+
+    .detail-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .purchase-item-row {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .purchase-item-row > div:first-child {
+        grid-column: 1 / -1;
     }
 }
