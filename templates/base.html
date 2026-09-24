@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ page_title or "Inventory-AI" }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <header class="site-header">
+        <a class="brand" href="{{ url_for('index') }}">Inventory-AI</a>
+        <nav aria-label="Main navigation">
+            <a href="{{ url_for('index') }}">Home</a>
+            <a href="{{ url_for('login') }}">Login</a>
+        </nav>
+    </header>
+
+    <main class="container">
+        {% if home_page %}
+        <section class="hero-card">
+            <p class="eyebrow">Project foundation</p>
+            <h1>Inventory management, made clear.</h1>
+            <p class="lead">The Flask application is running successfully.</p>
+            <a class="button" href="{{ url_for('login') }}">Open login page</a>
+        </section>
+        {% else %}
+            {% block content %}{% endblock %}
+        {% endif %}
+    </main>
+
+    <footer class="site-footer">
+        <p>&copy; 2026 Inventory-AI</p>
+    </footer>
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>

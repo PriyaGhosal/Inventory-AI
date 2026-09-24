@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="form-card">
+    <p class="eyebrow">Welcome back</p>
+    <h1>Sign in</h1>
+    <p class="muted">Authentication will be connected in a later project step.</p>
+    <form method="post" action="{{ url_for('login') }}">
+        <label for="username">Username</label>
+        <input id="username" name="username" type="text" autocomplete="username" required>
+
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+
+        <button class="button" type="submit">Sign in</button>
+    </form>
+</section>
+{% endblock %}
