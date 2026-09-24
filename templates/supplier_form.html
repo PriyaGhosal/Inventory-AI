@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="form-card supplier-form-card">
+    <p class="eyebrow">Inventory setup</p>
+    <h1>{{ form_title }}</h1>
+    <form method="post" action="{{ request.path }}">
+        <label for="supplier_name">Supplier Name</label>
+        <input
+            id="supplier_name"
+            name="supplier_name"
+            type="text"
+            maxlength="150"
+            value="{{ supplier.supplier_name }}"
+            required
+        >
+
+        <label for="contact_person">Contact Person</label>
+        <input
+            id="contact_person"
+            name="contact_person"
+            type="text"
+            maxlength="100"
+            value="{{ supplier.contact_person or '' }}"
+        >
+
+        <label for="email">Email</label>
+        <input
+            id="email"
+            name="email"
+            type="email"
+            maxlength="150"
+            value="{{ supplier.email or '' }}"
+        >
+
+        <label for="phone">Phone</label>
+        <input
+            id="phone"
+            name="phone"
+            type="tel"
+            maxlength="30"
+            value="{{ supplier.phone or '' }}"
+        >
+
+        <label for="address">Address</label>
+        <textarea id="address" name="address" maxlength="255" rows="4">{{ supplier.address or "" }}</textarea>
+
+        <div class="form-actions">
+            <button class="button" type="submit">{{ submit_label }}</button>
+            <a class="button button-secondary" href="{{ url_for('suppliers') }}">Cancel</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

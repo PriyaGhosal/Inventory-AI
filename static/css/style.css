@@ -119,6 +119,38 @@ nav a:hover {
     padding: 0;
 }
 
+.supplier-form-card {
+    max-width: 620px;
+}
+
+.search-form {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin: 0 0 1.5rem;
+    padding: 1rem 1.25rem;
+}
+
+.search-form label {
+    display: block;
+    margin-top: 0;
+}
+
+.search-controls {
+    align-items: center;
+    display: flex;
+    gap: 0.75rem;
+}
+
+.search-controls input {
+    flex: 1;
+}
+
+.search-controls .button {
+    flex-shrink: 0;
+    margin-top: 0;
+}
+
 .table-wrapper {
     overflow-x: auto;
 }
@@ -318,5 +350,14 @@ textarea:focus {
     .page-heading {
         align-items: flex-start;
         flex-direction: column;
+    }
+
+    .search-controls {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .search-controls .button {
+        width: 100%;
     }
 }

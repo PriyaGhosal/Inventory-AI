@@ -14,6 +14,7 @@
             {% if logged_in or session.get("user_id") %}
                 <a href="{{ url_for('dashboard') }}">Dashboard</a>
                 <a href="{{ url_for('categories') }}">Categories</a>
+                <a href="{{ url_for('suppliers') }}">Suppliers</a>
                 <form class="logout-form" method="post" action="{{ url_for('logout') }}">
                     <button class="nav-button" type="submit">Logout</button>
                 </form>

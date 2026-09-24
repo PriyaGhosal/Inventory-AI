@@ -2,6 +2,7 @@
 
 import click
 import mysql.connector
+import re
 from dotenv import load_dotenv
 from flask import Flask, flash, redirect, render_template, session, url_for
 from flask import request
@@ -379,6 +380,292 @@ def validate_category_input(category):
     if len(category["description"]) > 255:
         return "Description must be 255 characters or fewer."
     return None
+
+
+@app.get("/suppliers")
+def suppliers():
+    """Display suppliers, optionally filtered by a simple search term."""
+    if "user_id" not in session:
+        flash("Please log in to access suppliers.", "error")
+        return redirect(url_for("login"))
+
+    search_term = request.args.get("search", "").strip()
+    connection = None
+    cursor = None
+    supplier_rows = []
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        if search_term:
+            search_pattern = f"%{search_term}%"
+            cursor.execute(
+                """
+                SELECT supplier_id, supplier_name, contact_person, email,
+                       phone, address, created_at
+                FROM suppliers
+                WHERE supplier_name LIKE %s
+                   OR contact_person LIKE %s
+                   OR email LIKE %s
+                   OR phone LIKE %s
+                ORDER BY supplier_name ASC
+                """,
+                (search_pattern, search_pattern, search_pattern, search_pattern),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT supplier_id, supplier_name, contact_person, email,
+                       phone, address, created_at
+                FROM suppliers
+                ORDER BY supplier_name ASC
+                """
+            )
+        supplier_rows = cursor.fetchall()
+    except mysql.connector.Error:
+        app.logger.exception("Database error while loading suppliers")
+        flash("Suppliers are temporarily unavailable. Please try again.", "error")
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+    return render_template(
+        "suppliers.html",
+        page_title="Supplier Management",
+        suppliers=supplier_rows,
+        search_term=search_term,
+    )
+
+
+@app.route("/suppliers/add", methods=["GET", "POST"])
+def add_supplier():
+    """Display and process the add-supplier form."""
+    if "user_id" not in session:
+        flash("Please log in to manage suppliers.", "error")
+        return redirect(url_for("login"))
+
+    supplier = empty_supplier()
+    if request.method == "POST":
+        supplier = supplier_from_form()
+        validation_error = validate_supplier_input(supplier)
+        if validation_error:
+            flash(validation_error, "error")
+            return render_supplier_form(supplier, "Add Supplier", "Add Supplier")
+
+        connection = None
+        cursor = None
+        try:
+            connection = get_db_connection()
+            cursor = connection.cursor()
+            cursor.execute(
+                """
+                INSERT INTO suppliers
+                    (supplier_name, contact_person, email, phone, address)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                supplier_values(supplier),
+            )
+            connection.commit()
+        except mysql.connector.Error:
+            if connection is not None:
+                connection.rollback()
+            app.logger.exception("Database error while adding supplier")
+            flash("The supplier could not be added. Please try again.", "error")
+            return render_supplier_form(supplier, "Add Supplier", "Add Supplier")
+        finally:
+            if cursor is not None:
+                cursor.close()
+            if connection is not None and connection.is_connected():
+                connection.close()
+
+        flash("Supplier added successfully.", "success")
+        return redirect(url_for("suppliers"))
+
+    return render_supplier_form(supplier, "Add Supplier", "Add Supplier")
+
+
+@app.route("/suppliers/edit/<int:supplier_id>", methods=["GET", "POST"])
+def edit_supplier(supplier_id):
+    """Display and process the edit form for one supplier."""
+    if "user_id" not in session:
+        flash("Please log in to manage suppliers.", "error")
+        return redirect(url_for("login"))
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT supplier_id, supplier_name, contact_person, email, phone, address
+            FROM suppliers
+            WHERE supplier_id = %s
+            """,
+            (supplier_id,),
+        )
+        supplier = cursor.fetchone()
+    except mysql.connector.Error:
+        app.logger.exception("Database error while loading supplier %s", supplier_id)
+        flash("The supplier could not be loaded. Please try again.", "error")
+        return redirect(url_for("suppliers"))
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+    if supplier is None:
+        flash("Supplier not found.", "error")
+        return redirect(url_for("suppliers"))
+
+    if request.method == "POST":
+        supplier.update(supplier_from_form())
+        validation_error = validate_supplier_input(supplier)
+        if validation_error:
+            flash(validation_error, "error")
+            return render_supplier_form(supplier, "Edit Supplier", "Save Changes")
+
+        connection = None
+        cursor = None
+        try:
+            connection = get_db_connection()
+            cursor = connection.cursor()
+            cursor.execute(
+                """
+                UPDATE suppliers
+                SET supplier_name = %s, contact_person = %s, email = %s,
+                    phone = %s, address = %s
+                WHERE supplier_id = %s
+                """,
+                supplier_values(supplier) + (supplier_id,),
+            )
+            connection.commit()
+        except mysql.connector.Error:
+            if connection is not None:
+                connection.rollback()
+            app.logger.exception("Database error while editing supplier %s", supplier_id)
+            flash("The supplier could not be updated. Please try again.", "error")
+            return render_supplier_form(supplier, "Edit Supplier", "Save Changes")
+        finally:
+            if cursor is not None:
+                cursor.close()
+            if connection is not None and connection.is_connected():
+                connection.close()
+
+        flash("Supplier updated successfully.", "success")
+        return redirect(url_for("suppliers"))
+
+    return render_supplier_form(supplier, "Edit Supplier", "Save Changes")
+
+
+@app.post("/suppliers/delete/<int:supplier_id>")
+def delete_supplier(supplier_id):
+    """Delete a supplier only when no purchase records reference it."""
+    if "user_id" not in session:
+        flash("Please log in to manage suppliers.", "error")
+        return redirect(url_for("login"))
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        cursor.execute(
+            "DELETE FROM suppliers WHERE supplier_id = %s",
+            (supplier_id,),
+        )
+        if cursor.rowcount == 0:
+            flash("Supplier not found.", "error")
+        else:
+            connection.commit()
+            flash("Supplier deleted successfully.", "success")
+            return redirect(url_for("suppliers"))
+    except mysql.connector.IntegrityError:
+        if connection is not None:
+            connection.rollback()
+        flash(
+            "This supplier cannot be deleted because purchase records are associated with it.",
+            "error",
+        )
+    except mysql.connector.Error:
+        if connection is not None:
+            connection.rollback()
+        app.logger.exception("Database error while deleting supplier %s", supplier_id)
+        flash("The supplier could not be deleted. Please try again.", "error")
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None and connection.is_connected():
+            connection.close()
+
+    return redirect(url_for("suppliers"))
+
+
+def empty_supplier():
+    """Return the fields used by the supplier form."""
+    return {
+        "supplier_name": "",
+        "contact_person": "",
+        "email": "",
+        "phone": "",
+        "address": "",
+    }
+
+
+def supplier_from_form():
+    """Read and trim supplier fields submitted by the browser."""
+    return {
+        "supplier_name": request.form.get("supplier_name", "").strip(),
+        "contact_person": request.form.get("contact_person", "").strip(),
+        "email": request.form.get("email", "").strip(),
+        "phone": request.form.get("phone", "").strip(),
+        "address": request.form.get("address", "").strip(),
+    }
+
+
+def supplier_values(supplier):
+    """Return supplier fields in database column order."""
+    return (
+        supplier["supplier_name"],
+        supplier["contact_person"] or None,
+        supplier["email"] or None,
+        supplier["phone"] or None,
+        supplier["address"] or None,
+    )
+
+
+def validate_supplier_input(supplier):
+    """Return a friendly validation message, or None when input is valid."""
+    limits = (
+        ("supplier_name", 150, "Supplier name"),
+        ("contact_person", 100, "Contact person"),
+        ("email", 150, "Email"),
+        ("phone", 30, "Phone"),
+        ("address", 255, "Address"),
+    )
+    if not supplier["supplier_name"]:
+        return "Supplier name is required."
+    for field_name, maximum, label in limits:
+        if len(supplier[field_name]) > maximum:
+            return f"{label} must be {maximum} characters or fewer."
+    if supplier["email"] and not re.fullmatch(
+        r"[^@\s]+@[^@\s]+\.[^@\s]+", supplier["email"]
+    ):
+        return "Please enter a valid email address."
+    return None
+
+
+def render_supplier_form(supplier, form_title, submit_label):
+    """Render the shared add/edit supplier form."""
+    return render_template(
+        "supplier_form.html",
+        page_title=form_title,
+        form_title=form_title,
+        submit_label=submit_label,
+        supplier=supplier,
+    )
 
 
 @app.post("/logout")
