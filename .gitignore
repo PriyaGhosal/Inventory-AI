@@ -1,0 +1,13 @@
+inventory_env/
+venv/
+.venv/
+env/
+
+__pycache__/
+*.pyc
+
+.env
+
+.vscode/
+
+*.log
