@@ -148,4 +148,26 @@ reorder recommendation.
 The recommendation is intentionally limited: it does not yet account for
 supplier lead time, safety stock, seasonal demand, promotions, or sudden demand
 changes. No machine-learning or external forecasting packages are required for
-this stage.
+the Stage 10 baseline.
+
+## Stage 11 ML demand prediction
+
+Stage 11 adds an optional `RandomForestRegressor` model using real completed
+sales. It uses calendar fields, lagged demand, and a previous-seven-day rolling
+mean. Features are built without using the current day's target, and the data
+is split chronologically so later observations are held out for evaluation.
+
+The model is compared with the seven-day moving-average baseline using MAE and
+RMSE. The method with the lower held-out MAE is selected; ties keep the
+baseline. Models are cached per product under `models/*.joblib`, which is
+ignored by Git, and are retrained automatically when the sales-history
+signature changes.
+
+To explicitly train or retrain a model for one active product:
+
+```text
+python scripts/train_demand_model.py <product_id>
+```
+
+The ML forecast remains a planning aid and does not yet account for lead time,
+safety stock, seasonality, promotions, or sudden demand changes.

@@ -205,6 +205,47 @@ nav a:hover {
     padding: 1rem 1.25rem;
 }
 
+.forecast-metrics {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    margin-bottom: 1.5rem;
+    padding: 1.5rem;
+}
+
+.forecast-metrics h2 {
+    color: var(--navy);
+    font-size: 1.2rem;
+    margin-top: 0;
+}
+
+.metrics-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.metrics-grid div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.metrics-grid span {
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+
+.metric-preference {
+    border-top: 1px solid var(--border);
+    margin-bottom: 0;
+    padding-top: 1rem;
+}
+
+.forecast-fallback {
+    background: var(--pale-blue);
+}
+
 .dashboard-summary-grid {
     display: grid;
     gap: 1rem;
@@ -888,6 +929,10 @@ textarea:focus {
         grid-template-columns: repeat(2, 1fr);
     }
 
+    .metrics-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
     .detail-grid {
         grid-template-columns: repeat(2, 1fr);
     }
@@ -926,6 +971,10 @@ textarea:focus {
     }
 
     .forecast-summary-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .metrics-grid {
         grid-template-columns: 1fr;
     }
 }

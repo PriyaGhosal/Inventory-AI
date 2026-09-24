@@ -8,6 +8,7 @@ from decimal import Decimal, InvalidOperation
 from dotenv import load_dotenv
 from flask import Flask, flash, redirect, render_template, session, url_for
 from flask import request
+from pathlib import Path
 from werkzeug.security import check_password_hash, generate_password_hash
 
 # Load values from a local .env file when one exists.
@@ -19,6 +20,7 @@ from utils.forecasting import (
     calculate_reorder_recommendation,
     forecast_demand,
     get_daily_product_sales,
+    train_and_forecast_ml,
 )
 from utils.helpers import get_db_connection
 
@@ -243,6 +245,10 @@ def forecast():
     forecast_result = None
     recommendation = None
     has_sales_history = False
+    ml_result = None
+    baseline_result = None
+    selected_method = None
+    ml_available = False
     try:
         connection = get_db_connection()
         cursor = connection.cursor(dictionary=True)
@@ -277,9 +283,38 @@ def forecast():
                     observation["quantity"] > 0 for observation in daily_sales
                 )
                 if has_sales_history:
-                    forecast_result = forecast_demand(
+                    baseline_result = forecast_demand(
                         daily_sales, forecast_days=7, window=7
                     )
+                    model_path = (
+                        Path(app.root_path)
+                        / "models"
+                        / f"demand_model_{product['product_id']}.joblib"
+                    )
+                    ml_result = train_and_forecast_ml(
+                        daily_sales,
+                        forecast_days=7,
+                        model_path=model_path,
+                    )
+                    ml_available = ml_result["available"]
+                    if (
+                        ml_available
+                        and ml_result["preferred_method"]
+                        == "Random Forest Regression"
+                    ):
+                        selected_method = "ML Forecast - Random Forest"
+                        forecast_result = {
+                            "method": selected_method,
+                            "daily_forecast": ml_result["daily_forecast"],
+                            "total_forecast": ml_result["total_forecast"],
+                        }
+                    else:
+                        selected_method = "Baseline Forecast - 7-Day Moving Average"
+                        forecast_result = {
+                            "method": selected_method,
+                            "daily_forecast": baseline_result["daily_forecast"],
+                            "total_forecast": baseline_result["total_forecast"],
+                        }
                     recommendation = calculate_reorder_recommendation(
                         product["current_stock"],
                         forecast_result["total_forecast"],
@@ -302,6 +337,10 @@ def forecast():
         product=product,
         historical_sales=historical_sales,
         forecast_result=forecast_result,
+        baseline_result=baseline_result,
+        ml_result=ml_result,
+        ml_available=ml_available,
+        selected_method=selected_method,
         recommendation=recommendation,
         has_sales_history=has_sales_history,
         product_selected=bool(selected_product_id),
