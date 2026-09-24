@@ -30,7 +30,7 @@
 {% if not product_selected %}
     <p class="empty-state forecast-message">Select a product to view its demand forecast.</p>
 {% elif product and not has_sales_history %}
-    <p class="empty-state forecast-message">Not enough sales history to generate a meaningful forecast.</p>
+    <p class="empty-state forecast-message">No completed sales history is available for this product.</p>
 {% elif product and forecast_result and recommendation %}
     <section class="forecast-product-card">
         <div>

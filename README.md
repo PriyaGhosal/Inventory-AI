@@ -1,11 +1,191 @@
 # Inventory-AI
 
-Inventory-AI is a beginner-friendly Inventory Management System built with
-Python 3.10, Flask, MySQL, HTML, CSS, vanilla JavaScript, and Jinja2. The
-project is being developed in small steps. Stage 2 adds real MySQL-backed user
-authentication and a protected dashboard placeholder. Stage 3 adds protected
-category management with add, edit, list, and safe delete operations. Stage 4
-adds protected supplier management with search and safe delete operations.
+Inventory-AI is a beginner-friendly inventory management system for a
+B.Tech final-year project. It provides MySQL-backed authentication, product
+and supplier management, purchase and sales workflows, stock history,
+dashboard analytics, and explainable demand forecasting.
+
+## Features
+
+- User authentication with hashed passwords and Flask sessions
+- Product management
+- Category management
+- Supplier management
+- Purchase management with atomic stock receiving
+- Sales management with stock validation and cancellation
+- Inventory tracking and controlled stock adjustments
+- Stock transaction history
+- Dashboard analytics
+- Demand forecasting with a moving-average baseline
+- Random Forest ML demand prediction
+- Explainable reorder recommendations
+
+## Technology stack
+
+- Frontend: HTML, CSS, vanilla JavaScript, Jinja2
+- Backend: Python 3.10, Flask
+- Database: MySQL 8.0+
+- ML: scikit-learn Random Forest Regression and joblib model persistence
+
+## System architecture
+
+```mermaid
+flowchart TD
+    User --> Browser[HTML / CSS / JavaScript]
+    Browser --> Flask[Flask Application]
+    Flask --> MySQL[(MySQL Database)]
+    Flask --> Forecast[Forecasting Module]
+    Forecast --> SalesHistory[Completed Sales History]
+    Forecast --> Recommendation[Reorder Recommendation]
+```
+
+The forecasting flow is:
+
+```mermaid
+flowchart LR
+    A[Sales History] --> B[Daily Demand Preparation]
+    B --> C[Feature Engineering]
+    C --> D[Random Forest / Moving Average]
+    D --> E[Demand Forecast]
+    E --> F[Reorder Recommendation]
+```
+
+## Database
+
+The schema is defined in `database/inventory.sql` and contains:
+
+- `users`
+- `categories`
+- `suppliers`
+- `products`
+- `purchases`
+- `purchase_items`
+- `sales`
+- `sale_items`
+- `stock_transactions`
+
+## Entity relationship diagram
+
+This diagram reflects the relationships in the current schema.
+
+```mermaid
+erDiagram
+    USERS ||--o{ PURCHASES : creates
+    USERS ||--o{ SALES : creates
+    USERS ||--o{ STOCK_TRANSACTIONS : records
+    CATEGORIES ||--o{ PRODUCTS : contains
+    SUPPLIERS ||--o{ PRODUCTS : supplies
+    SUPPLIERS ||--o{ PURCHASES : receives
+    PRODUCTS ||--o{ PURCHASE_ITEMS : included
+    PURCHASES ||--o{ PURCHASE_ITEMS : contains
+    PRODUCTS ||--o{ SALE_ITEMS : included
+    SALES ||--o{ SALE_ITEMS : contains
+    PRODUCTS ||--o{ STOCK_TRANSACTIONS : moves
+    PURCHASES o|--o{ STOCK_TRANSACTIONS : references
+    SALES o|--o{ STOCK_TRANSACTIONS : references
+```
+
+## AI/ML approach
+
+The forecasting page uses completed sales only. Daily quantities are
+aggregated from `sales` and `sale_items`, and days without sales are retained
+as zero-demand observations.
+
+The Random Forest model uses:
+
+- Day of week
+- Day of month
+- Month
+- Day of year
+- Previous-day demand lags (`lag_1`, `lag_2`, `lag_3`, `lag_7`)
+- Previous-seven-day rolling mean
+
+Features never include the current target quantity. Historical data is split
+chronologically: earlier observations train the model and later observations
+form the test set. The model is evaluated with MAE and RMSE and compared with
+the existing seven-day moving-average baseline. The lower held-out MAE wins;
+ties keep the moving-average baseline.
+
+Models are cached per product under `models/*.joblib`. These generated files
+are ignored by Git. The recommendation uses forecasted demand and the
+existing reorder level, but does not yet model lead time, safety stock,
+seasonality, promotions, or sudden demand changes.
+
+## Installation
+
+1. Clone the repository:
+
+   ```powershell
+   git clone <repository-url>
+   cd Inventory-AI
+   ```
+
+2. Create and activate a Python 3.10 virtual environment:
+
+   ```powershell
+   python -m venv inventory_env
+   .\inventory_env\Scripts\Activate.ps1
+   ```
+
+3. Install dependencies:
+
+   ```powershell
+   python -m pip install -r requirements.txt
+   ```
+
+4. Copy `.env.example` to `.env` and set local values.
+5. Create the MySQL database and tables:
+
+   ```text
+   mysql -u root -p < database/inventory.sql
+   ```
+
+6. Create a local administrator:
+
+   ```powershell
+   flask --app app create-admin
+   ```
+
+7. Start locally:
+
+   ```powershell
+   python app.py
+   ```
+
+8. Open <http://127.0.0.1:5000/>.
+
+For deployment, the included `Procfile` runs:
+
+```text
+web: gunicorn app:app
+```
+
+## Environment variables
+
+Use placeholders from `.env.example`; never commit real credentials.
+
+```text
+MYSQL_HOST=localhost
+MYSQL_USER=root
+MYSQL_PASSWORD=your_mysql_password
+MYSQL_DATABASE=inventory_db
+SECRET_KEY=replace_with_a_long_random_secret_key
+FLASK_DEBUG=false
+```
+
+`FLASK_DEBUG=true` is intended only for local troubleshooting. The
+application defaults to debug mode off.
+
+## Usage
+
+1. Sign in with an administrator created by `flask create-admin`.
+2. Manage categories, suppliers, and products.
+3. Create purchases and receive incoming stock.
+4. Record sales; completed sales reduce stock atomically.
+5. Review inventory, adjust stock with a required reason, and inspect history.
+6. Use the dashboard for summaries and recent activity.
+7. Open Demand Forecast, select an active product, and review the baseline or
+   evaluated Random Forest forecast.
 
 ## Project structure
 
@@ -14,160 +194,33 @@ Inventory-AI/
 ├── app.py
 ├── config.py
 ├── requirements.txt
+├── Procfile
 ├── .env.example
-├── database/inventory.sql
-├── templates/base.html
-├── templates/login.html
-├── templates/dashboard.html
-├── templates/categories.html
-├── templates/category_form.html
-├── templates/suppliers.html
-├── templates/supplier_form.html
-├── templates/products.html
-├── templates/product_form.html
-├── templates/purchases.html
-├── templates/purchase_form.html
-├── templates/purchase_detail.html
-├── templates/sales.html
-├── templates/sale_form.html
-├── templates/sale_detail.html
-├── templates/inventory.html
-├── templates/stock_adjustment.html
-├── templates/stock_history.html
-├── templates/dashboard.html
-├── static/css/style.css
-├── static/js/script.js
-└── utils/helpers.py
+├── database/
+│   └── inventory.sql
+├── scripts/
+│   └── train_demand_model.py
+├── templates/
+│   ├── base.html
+│   ├── 404.html
+│   ├── 500.html
+│   └── ...feature templates
+├── static/
+│   ├── css/style.css
+│   └── js/script.js
+├── utils/
+│   ├── forecasting.py
+│   └── helpers.py
+└── models/
+    └── generated *.joblib files (ignored)
 ```
 
-## Setup
+## Future enhancements
 
-1. Use Python 3.10 and create or activate a virtual environment.
-2. Install the dependencies:
-
-   ```powershell
-   pip install -r requirements.txt
-   ```
-
-3. Copy `.env.example` to `.env` and set your local MySQL values.
-4. Create the database and tables by running `database/inventory.sql` in
-   MySQL Workbench or the MySQL command line client.
-5. Start the development server:
-
-   ```powershell
-   python app.py
-   ```
-
-6. Open <http://127.0.0.1:5000/> in a browser. The initial login screen is
-   available at <http://127.0.0.1:5000/login>.
-
-## Create a local development admin
-
-After the database has been created and `.env` is configured, run:
-
-```powershell
-flask --app app create-admin
-```
-
-The command prompts for the full name, username, email, and password. The
-password is entered privately, hashed with Werkzeug, and never stored in plain
-text or included in the command line.
-
-Log in at `/login`. Successful authentication redirects to `/dashboard`.
-The dashboard is protected and redirects unauthenticated visitors to the
-login page. Use the Logout button to clear the session.
-
-Purchase, sales, reporting, and AI functionality are not implemented yet.
-
-## Category management
-
-After logging in, use the **Categories** link in the navigation to manage
-categories. Category names are required, limited to 100 characters, and must
-be unique. Descriptions are optional and limited to the existing database
-column size of 255 characters. A category that is referenced by a product
-cannot be deleted.
-
-## Supplier management
-
-After logging in, use the **Suppliers** link in the navigation to manage
-supplier contact details. Supplier lists can be filtered with the search box
-or with a URL such as `/suppliers?search=acme`. Searches check supplier name,
-contact person, email, and phone. A supplier that is referenced by a purchase
-cannot be deleted.
-
-## Product management
-
-After logging in, use the **Products** link to add and edit products, search
-by product name, SKU, category, or supplier, and filter by active status.
-Products can be activated or deactivated without deleting historical records.
-Current stock is manually editable at this stage; automatic stock transactions
-are not yet implemented.
-
-## Purchase management
-
-The protected **Purchases** module creates pending purchases with multiple
-items. Totals are recalculated on the server. Creating a pending purchase does
-not change stock. Receiving a purchase uses one database transaction to update
-all product stock values, create matching `stock_transactions` records, and
-mark the purchase as received. Cancelling a pending purchase does not change
-stock.
-
-## Sales management
-
-The protected **Sales** module records completed sales with multiple items,
-reduces stock atomically, and creates matching `stock_transactions` rows.
-Sales can be searched by sale ID, customer name, or phone, and filtered by
-payment method. Cancelling a completed sale restores stock in one transaction
-and records return transactions. A cancelled sale cannot be cancelled again.
-
-## Inventory and stock history
-
-The protected **Inventory** page summarizes current stock, supports product
-search and stock/active-status filters, and provides controlled manual
-adjustments. Increases record positive adjustment quantities; decreases record
-negative adjustment quantities. Every adjustment locks the product row and
-updates `products.current_stock` and `stock_transactions` in one transaction.
-Purchases and sales continue to own their existing stock-update logic.
-
-## Dashboard and reporting
-
-The protected dashboard now shows aggregated product, category, supplier,
-stock-value, and today activity summaries. It also shows low-stock alerts,
-recent completed sales, received purchases, and recent stock activity. These
-sections read the existing tables without adding sample data or changing stock
-movement behavior.
-
-## Stage 10 demand forecasting foundation
-
-The protected **Demand Forecast** page uses completed sales from the last 90
-days to create a simple, explainable seven-day moving-average baseline for a
-selected active product. Days with no sales are included as zero-demand
-observations. The page also shows the last 30 days of demand and a baseline
-reorder recommendation.
-
-The recommendation is intentionally limited: it does not yet account for
-supplier lead time, safety stock, seasonal demand, promotions, or sudden demand
-changes. No machine-learning or external forecasting packages are required for
-the Stage 10 baseline.
-
-## Stage 11 ML demand prediction
-
-Stage 11 adds an optional `RandomForestRegressor` model using real completed
-sales. It uses calendar fields, lagged demand, and a previous-seven-day rolling
-mean. Features are built without using the current day's target, and the data
-is split chronologically so later observations are held out for evaluation.
-
-The model is compared with the seven-day moving-average baseline using MAE and
-RMSE. The method with the lower held-out MAE is selected; ties keep the
-baseline. Models are cached per product under `models/*.joblib`, which is
-ignored by Git, and are retrained automatically when the sales-history
-signature changes.
-
-To explicitly train or retrain a model for one active product:
-
-```text
-python scripts/train_demand_model.py <product_id>
-```
-
-The ML forecast remains a planning aid and does not yet account for lead time,
-safety stock, seasonality, promotions, or sudden demand changes.
+- Supplier lead-time-aware reorder planning
+- Seasonal forecasting
+- Safety stock optimization
+- Expanded role-based permissions
+- Cloud deployment configuration
+- Email and notification alerts
+- Scheduled model retraining

@@ -4,9 +4,12 @@ import os
 
 
 class Config:
-    """Central configuration for Flask and the future MySQL connection."""
+    """Central configuration for Flask and the MySQL connection."""
 
     SECRET_KEY = os.getenv("SECRET_KEY", "development-only-change-me")
+    DEBUG = os.getenv("FLASK_DEBUG", "false").strip().lower() in {
+        "1", "true", "yes", "on"
+    }
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
 

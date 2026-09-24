@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="empty-state error-page">
+    <p class="eyebrow">500 error</p>
+    <h1>Something went wrong</h1>
+    <p class="muted">We could not complete that request. Please try again shortly.</p>
+    <a class="button" href="{{ url_for('dashboard') }}">Back to Dashboard</a>
+</section>
+{% endblock %}

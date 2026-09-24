@@ -29,6 +29,19 @@ app = Flask(__name__)
 app.config.from_object(Config)
 
 
+@app.errorhandler(404)
+def page_not_found(error):
+    """Render a friendly page without exposing request internals."""
+    return render_template("404.html", page_title="Page Not Found"), 404
+
+
+@app.errorhandler(500)
+def internal_server_error(error):
+    """Log unexpected errors and show a safe generic error page."""
+    app.logger.error("Unhandled application error: %s", error)
+    return render_template("500.html", page_title="Server Error"), 500
+
+
 @app.route("/")
 def index():
     """Show the public landing page."""
@@ -2720,5 +2733,5 @@ def create_admin():
 
 
 if __name__ == "__main__":
-    # Debug mode is useful during development and can be disabled for deployment.
-    app.run(debug=True)
+    # Set FLASK_DEBUG=true only for local debugging; production stays off.
+    app.run(debug=app.config["DEBUG"])
