@@ -8,18 +8,22 @@
 </head>
 <body>
     <header class="site-header">
-        <a class="brand" href="{{ url_for('index') }}">Inventory-AI</a>
+        <div class="header-inner">
+        <a class="brand" href="{{ url_for('index') }}">
+            <span class="brand-mark">IA</span>
+            <span>Inventory<span class="brand-accent">-AI</span></span>
+        </a>
         <nav aria-label="Main navigation">
-            <a href="{{ url_for('index') }}">Home</a>
+            <a class="{% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}">Home</a>
             {% if logged_in or session.get("user_id") %}
-                <a href="{{ url_for('dashboard') }}">Dashboard</a>
-                <a href="{{ url_for('categories') }}">Categories</a>
-                <a href="{{ url_for('suppliers') }}">Suppliers</a>
-                <a href="{{ url_for('products') }}">Products</a>
-                <a href="{{ url_for('purchases') }}">Purchases</a>
-                <a href="{{ url_for('sales') }}">Sales</a>
-                <a href="{{ url_for('inventory') }}">Inventory</a>
-                <a href="{{ url_for('forecast') }}">Demand Forecast</a>
+                <a class="{% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">Dashboard</a>
+                <a class="{% if request.endpoint in ('categories', 'add_category', 'edit_category') %}active{% endif %}" href="{{ url_for('categories') }}">Categories</a>
+                <a class="{% if request.endpoint in ('suppliers', 'add_supplier', 'edit_supplier') %}active{% endif %}" href="{{ url_for('suppliers') }}">Suppliers</a>
+                <a class="{% if request.endpoint in ('products', 'add_product', 'edit_product') %}active{% endif %}" href="{{ url_for('products') }}">Products</a>
+                <a class="{% if request.endpoint in ('purchases', 'add_purchase', 'purchase_detail') %}active{% endif %}" href="{{ url_for('purchases') }}">Purchases</a>
+                <a class="{% if request.endpoint in ('sales', 'add_sale', 'sale_detail') %}active{% endif %}" href="{{ url_for('sales') }}">Sales</a>
+                <a class="{% if request.endpoint in ('inventory', 'adjust_inventory', 'inventory_history') %}active{% endif %}" href="{{ url_for('inventory') }}">Inventory</a>
+                <a class="{% if request.endpoint == 'forecast' %}active{% endif %}" href="{{ url_for('forecast') }}">Forecast</a>
                 <form class="logout-form" method="post" action="{{ url_for('logout') }}">
                     <button class="nav-button" type="submit">Logout</button>
                 </form>
@@ -27,6 +31,7 @@
                 <a href="{{ url_for('login') }}">Login</a>
             {% endif %}
         </nav>
+        </div>
     </header>
 
     <main class="container">
@@ -34,18 +39,40 @@
             {% if messages %}
                 <div class="flash-list" aria-live="polite">
                     {% for category, message in messages %}
-                        <div class="flash flash-{{ category }}">{{ message }}</div>
+                        <div class="flash flash-{{ category }}">
+                            <span>{{ message }}</span>
+                            <button class="flash-dismiss" type="button" aria-label="Dismiss message">×</button>
+                        </div>
                     {% endfor %}
                 </div>
             {% endif %}
         {% endwith %}
 
         {% if home_page %}
-        <section class="hero-card">
-            <p class="eyebrow">Project foundation</p>
-            <h1>Inventory management, made clear.</h1>
-            <p class="lead">The Flask application is running successfully.</p>
-            <a class="button" href="{{ url_for('login') }}">Open login page</a>
+        <section class="hero-shell">
+            <div class="hero-copy">
+                <p class="eyebrow">Smart inventory management</p>
+                <h1>Manage inventory with <span>clarity.</span></h1>
+                <p class="lead">Products, suppliers, purchases, sales, stock tracking, and demand forecasting in one focused workspace.</p>
+                <div class="hero-actions">
+                    {% if session.get("user_id") %}
+                        <a class="button" href="{{ url_for('dashboard') }}">Open Dashboard</a>
+                        <a class="button button-secondary" href="{{ url_for('forecast') }}">Demand Forecast</a>
+                    {% else %}
+                        <a class="button" href="{{ url_for('login') }}">Open Dashboard</a>
+                        <a class="button button-secondary" href="{{ url_for('login') }}">Demand Forecast</a>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="capability-panel">
+                <div class="capability-panel-header"><span class="status-dot"></span><span>Operations overview</span><strong>LIVE</strong></div>
+                <div class="capability-grid">
+                    <div class="capability-item"><span class="capability-icon">P</span><strong>Products</strong><small>Catalog control</small></div>
+                    <div class="capability-item"><span class="capability-icon">S</span><strong>Stock tracking</strong><small>Always in view</small></div>
+                    <div class="capability-item"><span class="capability-icon">↗</span><strong>Sales &amp; purchases</strong><small>Move with confidence</small></div>
+                    <div class="capability-item"><span class="capability-icon">◎</span><strong>AI forecasting</strong><small>Plan ahead</small></div>
+                </div>
+            </div>
         </section>
         {% else %}
             {% block content %}{% endblock %}

@@ -14,14 +14,14 @@
 </section>
 
 <div class="dashboard-summary-grid">
-    <div class="summary-card"><span>Active Products</span><strong>{{ summary.total_products }}</strong></div>
-    <div class="summary-card summary-low-stock"><span>Low Stock</span><strong>{{ summary.low_stock_items }}</strong></div>
-    <div class="summary-card summary-out-stock"><span>Out of Stock</span><strong>{{ summary.out_of_stock }}</strong></div>
-    <div class="summary-card"><span>Inventory Value</span><strong>₹{{ "%.2f"|format(summary.inventory_value) }}</strong></div>
-    <div class="summary-card"><span>Categories</span><strong>{{ summary.total_categories }}</strong></div>
-    <div class="summary-card"><span>Suppliers</span><strong>{{ summary.total_suppliers }}</strong></div>
-    <div class="summary-card summary-today"><span>Today's Sales</span><strong>₹{{ "%.2f"|format(summary.todays_sales) }}</strong></div>
-    <div class="summary-card summary-today"><span>Today's Purchases</span><strong>₹{{ "%.2f"|format(summary.todays_purchases) }}</strong></div>
+    <div class="summary-card"><span class="metric-icon">PR</span><span>Active Products</span><strong>{{ summary.total_products }}</strong></div>
+    <div class="summary-card summary-low-stock"><span class="metric-icon">!</span><span>Low Stock</span><strong>{{ summary.low_stock_items }}</strong></div>
+    <div class="summary-card summary-out-stock"><span class="metric-icon">0</span><span>Out of Stock</span><strong>{{ summary.out_of_stock }}</strong></div>
+    <div class="summary-card"><span class="metric-icon">₹</span><span>Inventory Value</span><strong>₹{{ "%.2f"|format(summary.inventory_value) }}</strong></div>
+    <div class="summary-card"><span class="metric-icon">CA</span><span>Categories</span><strong>{{ summary.total_categories }}</strong></div>
+    <div class="summary-card"><span class="metric-icon">SU</span><span>Suppliers</span><strong>{{ summary.total_suppliers }}</strong></div>
+    <div class="summary-card summary-today"><span class="metric-icon">↗</span><span>Today's Sales</span><strong>₹{{ "%.2f"|format(summary.todays_sales) }}</strong></div>
+    <div class="summary-card summary-today"><span class="metric-icon">↙</span><span>Today's Purchases</span><strong>₹{{ "%.2f"|format(summary.todays_purchases) }}</strong></div>
 </div>
 
 <section class="dashboard-section">

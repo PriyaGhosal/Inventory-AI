@@ -11,10 +11,10 @@
 </section>
 
 <div class="summary-grid">
-    <div class="summary-card"><span>Total Products</span><strong>{{ summary.total_products }}</strong></div>
-    <div class="summary-card summary-in-stock"><span>In Stock</span><strong>{{ summary.in_stock }}</strong></div>
-    <div class="summary-card summary-low-stock"><span>Low Stock</span><strong>{{ summary.low_stock }}</strong></div>
-    <div class="summary-card summary-out-stock"><span>Out of Stock</span><strong>{{ summary.out_of_stock }}</strong></div>
+    <div class="summary-card"><span class="metric-icon">PR</span><span>Total Products</span><strong>{{ summary.total_products }}</strong></div>
+    <div class="summary-card summary-in-stock"><span class="metric-icon">✓</span><span>In Stock</span><strong>{{ summary.in_stock }}</strong></div>
+    <div class="summary-card summary-low-stock"><span class="metric-icon">!</span><span>Low Stock</span><strong>{{ summary.low_stock }}</strong></div>
+    <div class="summary-card summary-out-stock"><span class="metric-icon">0</span><span>Out of Stock</span><strong>{{ summary.out_of_stock }}</strong></div>
 </div>
 
 <form class="search-form" method="get" action="{{ url_for('inventory') }}">
